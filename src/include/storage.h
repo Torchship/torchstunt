@@ -127,11 +127,10 @@ typedef enum Memory_Type {
     /* to be used when no more specific type applies */
     M_STRUCT, M_ARRAY,
 
-	/* used with xml data */
+    /* used with xml data */
 	M_XML_DATA,
 
     Sizeof_Memory_Type
-
 } Memory_Type;
 
 extern char *str_dup(const char *);
