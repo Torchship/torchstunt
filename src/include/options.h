@@ -39,7 +39,7 @@
  * input to the log file.
  */
 
-/* #define LOG_EVALS */
+#define LOG_EVALS
 
 /******************************************************************************
  * Define ENABLE_GC to enable automatic garbage collection of cyclic data
@@ -100,17 +100,17 @@
  * The following constants define the execution limits placed on all MOO tasks.
  *
  * DEFAULT_MAX_STACK_DEPTH is the default maximum depth allowed for the MOO
- *	verb-call stack, the maximum number of dynamically-nested calls at any
- *	given time.  If defined in the database and larger than this default,
- *	$server_options.max_stack_depth overrides this default.
+ *  verb-call stack, the maximum number of dynamically-nested calls at any
+ *  given time.  If defined in the database and larger than this default,
+ *  $server_options.max_stack_depth overrides this default.
  * DEFAULT_FG_TICKS and DEFAULT_BG_TICKS are the default maximum numbers of
- *	`ticks' (basic operations) any task is allowed to use without
- *	suspending.  If defined in the database, $server_options.fg_ticks and
- *	$server_options.bg_ticks override these defaults.
+ *  `ticks' (basic operations) any task is allowed to use without
+ *  suspending.  If defined in the database, $server_options.fg_ticks and
+ *  $server_options.bg_ticks override these defaults.
  * DEFAULT_FG_SECONDS and DEFAULT_BG_SECONDS are the default maximum numbers of
- *	real-time seconds any task is allowed to use without suspending.  If
- *	defined in the database, $server_options.fg_seconds and
- *	$server_options.bg_seconds override these defaults.
+ *  real-time seconds any task is allowed to use without suspending.  If
+ *  defined in the database, $server_options.fg_seconds and
+ *  $server_options.bg_seconds override these defaults.
  *
  * The *FG* constants are used only for `foreground' tasks (those started by
  * either player input or the server's initiative and that have never
@@ -122,7 +122,7 @@
  * updated.
  */
 
-#define DEFAULT_MAX_STACK_DEPTH	 50
+#define DEFAULT_MAX_STACK_DEPTH  50
 
 #define DEFAULT_FG_TICKS         60000
 #define DEFAULT_BG_TICKS         30000
@@ -137,11 +137,11 @@
  * port argument is given on the command line.
  */
 
-#define DEFAULT_PORT 		7777
+#define DEFAULT_PORT    5555
 
 /******************************************************************************
- * MP_SELECT	 The server will assume that the select() system call exists.
- * MP_POLL	    The server will assume that the poll() system call exists.
+ * MP_SELECT   The server will assume that the select() system call exists.
+ * MP_POLL      The server will assume that the poll() system call exists.
  *
  * Usually, it works best to leave MPLEX_STYLE undefined and let the code at
  * the bottom of this file pick the right value.
@@ -192,7 +192,7 @@
  * DEFAULT_TLS_KEY can be overridden with the command-line option --tls-key (-k)
  */
 
-#define USE_TLS
+/* #define USE_TLS */
 #define VERIFY_TLS_PEERS
 #define DEFAULT_TLS_CERT    "/etc/letsencrypt/live/fullchain.pem"
 #define DEFAULT_TLS_KEY     "/etc/letsencrypt/live/privkey.pem"
@@ -203,24 +203,24 @@
  * behavior.
  *
  * MAX_QUEUED_OUTPUT is the maximum number of output characters the server is
- *		     willing to buffer for any given network connection before
- *		     discarding old output to make way for new.  The server
- *		     only discards output after attempting to send as much as
- *		     possible on the connection without blocking.
+ *         willing to buffer for any given network connection before
+ *         discarding old output to make way for new.  The server
+ *         only discards output after attempting to send as much as
+ *         possible on the connection without blocking.
  * MAX_QUEUED_INPUT is the maximum number of input characters the server is
- *		    willing to buffer from any given network connection before
- *		    it stops reading from the connection at all.  The server
- *		    starts reading from the connection again once most of the
- *		    buffered input is consumed.
+ *        willing to buffer from any given network connection before
+ *        it stops reading from the connection at all.  The server
+ *        starts reading from the connection again once most of the
+ *        buffered input is consumed.
  * MAX_LINE_BYTES is the maximum amount of bytes that a line sent to the server
  *          can consist of prior to the connection unceremoniously being closed,
- *		    to prevent memory allocation panics.
+ *        to prevent memory allocation panics.
  * DEFAULT_CONNECT_TIMEOUT is the default number of seconds an un-logged-in
- *			   connection is allowed to remain idle without being
- *			   forcibly closed by the server; this can be
- *			   overridden by defining the `connect_timeout'
- *			   property on $server_options or on L, for connections
- *			   accepted by a given listener L.
+ *         connection is allowed to remain idle without being
+ *         forcibly closed by the server; this can be
+ *         overridden by defining the `connect_timeout'
+ *         property on $server_options or on L, for connections
+ *         accepted by a given listener L.
  *
  * If defined in the database, $server_options.max_queued_output will override
  * the default value specified here.
@@ -516,7 +516,7 @@
  */
 
 #define TOTAL_BACKGROUND_THREADS    2
-#define DEFAULT_THREAD_MODE         true
+#define DEFAULT_THREAD_MODE         false
 
 /******************************************************************************
  * By default, the server will resolve DNS hostnames from IP addresses for all
@@ -576,12 +576,12 @@
 #  error Illegal match() pattern cache size!
 #endif
 
-#define NP_TCP		1
+#define NP_TCP    1
 
-#define NS_BSD		1
+#define NS_BSD    1
 
-#define MP_SELECT	1
-#define MP_POLL		2
+#define MP_SELECT 1
+#define MP_POLL   2
 
 #include "config.h"
 
@@ -638,10 +638,10 @@
 #  error Illegal value for "NETWORK_STYLE"
 #endif
 
-#if defined(MPLEX_STYLE) 	\
+#if defined(MPLEX_STYLE)  \
     && MPLEX_STYLE != MP_SELECT \
     && MPLEX_STYLE != MP_POLL
 #  error Illegal value for "MPLEX_STYLE"
 #endif
 
-#endif				/* !Options_h */
+#endif        /* !Options_h */
