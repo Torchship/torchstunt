@@ -154,9 +154,9 @@
  * allows (only) wizard-owned MOO code to make outbound network connections
  * from the server.  When disabled, it raises E_PERM whenever called.
  *
- * The --outbound (-o) and --no-outbound (-O) command line options can explicitly
- * enable and disable this function.  If neither option is supplied, the definition
- * given to OUTBOUND_NETWORK here determines the default behavior.
+ * The +O and -O command line options can explicitly enable and disable this
+ * function.  If neither option is supplied, the definition given to
+ * OUTBOUND_NETWORK here determines the default behavior
  * (use 0 to disable by default, 1 or blank to enable by default).
  *
  * If OUTBOUND_NETWORK is not defined at all,
@@ -166,30 +166,27 @@
  * In some contexts, this could represent a serious breach of security.
  */
 
-/* disable by default, --outbound (or -o) enables: */
+/* disable by default, +O enables: */
 /* #define OUTBOUND_NETWORK 0 */
 
-/* enable by default, --no-outbound (or -O) disables: */
+/* enable by default, -O disables: */
 #define OUTBOUND_NETWORK 1
 
 /******************************************************************************
  * The server supports secure TLS connections using the OpenSSL library.
  * If USE_TLS is defined, you will be able to listen() for TLS connections
  * and connect to TLS servers using open_network_connection().
- *
  * If VERIFY_TLS_PEERS is defined, the peer certificate must be signed with a CA
  * or the connection will fail.
- *
- * If USE_TLS is not defined at all, TLS options are disabled and
- * the --tls-port (-t) flag is ignored.
- *
+ * 
+ * The +T and -T command line options can explicitly enable and disable this
+ * function. If neither option is supplied, the definition given to
+ * USE_TLS here determines the default behavior.
+ * 
  * If LOG_TLS_CONNECTIONS is defined, each connection will be accompanied by
  * a TLS negotiation message which includes the ciphersuite. The ciphersuite is
  * also available from the connection_info() built-in function, which will be
  * unaffected by this option.
- *
- * DEFAULT_TLS_CERT can be overridden with the command-line option --tls-cert (-r)
- * DEFAULT_TLS_KEY can be overridden with the command-line option --tls-key (-k)
  */
 
 /* #define USE_TLS */
@@ -270,7 +267,7 @@
  ******************************************************************************
  */
 
-/* #define IGNORE_PROP_PROTECTED */
+#define IGNORE_PROP_PROTECTED
 
 /******************************************************************************
  * The code generator can now recognize situations where the code will not
@@ -385,8 +382,7 @@
 /******************************************************************************
  * Configurable options for the Exec subsystem.  EXEC_SUBDIR is the
  * directory inside the working directory in which all executable
- * files must reside. This can be overridden with the command-line option
- * --exec-dir (-x)
+ * files must reside.
  ******************************************************************************
  */
 
@@ -396,11 +392,8 @@
 /******************************************************************************
  * Configurable options for the FileIO subsystem.  FILE_SUBDIR is the
  * directory inside the working directory in which all files must
- * reside. This can be overridden with the command-line option --file-dir (-i)
- *
- * FILE_IO_MAX_FILES indicated the maximum number of files that can be open at
- * once. It can be overridden in-database by adding
- * the $server_options.file_io_max_files property and calling load_server_options()
+ * reside. FILE_IO_MAX_FILES can be overridden in-database by adding the
+ * $server_options.file_io_max_files property and calling load_server_options()
  ******************************************************************************
  */
 
@@ -460,7 +453,7 @@
  * (The number defined is how many tasks will get saved.)
  ******************************************************************************
 */
-/* #define SAVE_FINISHED_TASKS 15 */
+#define SAVE_FINISHED_TASKS 100
 
 /******************************************************************************
  * For debugging tracebacks, it is possible to capture the variables for the
@@ -587,7 +580,6 @@
 
 #ifndef USE_TLS
  #define USE_TLS_BOOL
- #define TLS_PORT_TYPE
  #define TLS_CERT_PATH
  #define TLS_CERT_PATH_DEF
  #define USE_TLS_BOOL_DEF
@@ -600,7 +592,6 @@
  * I decided this would look nicer than splitting everything up
  * with ifdefs everywhere... */
  #define USE_TLS_BOOL , use_tls
- #define TLS_PORT_TYPE , port_type
  #define USE_TLS_BOOL_DEF , bool use_tls
  #define TLS_CERT_PATH , certificate_path, key_path
  #define TLS_CERT_PATH_DEF , const char *certificate_path, const char *key_path
