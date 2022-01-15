@@ -580,6 +580,7 @@
 
 #ifndef USE_TLS
  #define USE_TLS_BOOL
+ #define TLS_PORT_TYPE
  #define TLS_CERT_PATH
  #define TLS_CERT_PATH_DEF
  #define USE_TLS_BOOL_DEF
@@ -592,6 +593,7 @@
  * I decided this would look nicer than splitting everything up
  * with ifdefs everywhere... */
  #define USE_TLS_BOOL , use_tls
+ #define TLS_PORT_TYPE , port_type
  #define USE_TLS_BOOL_DEF , bool use_tls
  #define TLS_CERT_PATH , certificate_path, key_path
  #define TLS_CERT_PATH_DEF , const char *certificate_path, const char *key_path
