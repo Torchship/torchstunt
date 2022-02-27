@@ -44,8 +44,8 @@ if( CMAKE_SIZEOF_VOID_P EQUAL 4 )
 endif()
 
 # Compiler Flags
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 17)
 
 # These flags are shared by the RELEASE and WARN build types.
 set(SHARED_COMPILE_FLAGS "-O3")
@@ -151,6 +151,7 @@ find_package(ASPELL)
 find_package(SQLite3)
 find_package(OpenSSL)
 find_package(Expat)
+find_package(ZDB)
 
 # Millions of source files
 set(src_CSRCS
@@ -235,7 +236,8 @@ set(src_CXXSRCS
     src/simplexnoise.cc
     src/argon2.cc
     src/spellcheck.cc
-    src/curl.cc)
+    src/curl.cc
+    src/sqldb.cc)
 
 set(src_GRAMMAR
     ${BISON_MOOParser_OUTPUTS})
@@ -283,6 +285,11 @@ endif()
 if(SQLITE3_FOUND)
     include_directories(${SQLITE3_INCLUDE_DIRS})
     target_link_libraries(moo ${SQLITE3_LIBRARIES})
+endif()
+
+if (ZDB_FOUND)
+    include_directories(${ZDB_INCLUDE_DIRS})
+    target_link_libraries(moo ${ZDB_LIBRARIES})
 endif()
 
 if(OPENSSL_FOUND)
