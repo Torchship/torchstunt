@@ -136,6 +136,7 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 
 ## Build Instructions
 ### **Debian/Ubuntu**
+for more info you can see: #temp-anaconda for how we did this for the dev server
 ```bash
 apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev
 For sindome we may need:
