@@ -140,6 +140,26 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev
 For sindome we may need:
 sudo apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libssl-dev libexpat1-dev libzdb-dev
+libzdb manually install (https://www.tildeslash.com/libzdb/#home):
+use an updated version if you want
+- wget https://www.tildeslash.com/libzdb/dist/libzdb-3.2.2.tar.gz
+- tar -xzf libzdb-3.2.2.tar.gz
+- cd libzdb-3.2.2/
+- ./configure
+- make
+- sudo make install
+
+just uninstall the packages, download the source code for libzdb, and build it yourself
+12:32
+https://www.tildeslash.com/libzdb/#home
+
+tildeslash.comtildeslash.com
+Database Connection Pool Library | Libzdb
+C Database Connection Pool and Database Abstraction Library
+12:33
+  ./configure
+  make
+  make install 
 
 mkdir build && cd build
 cmake ../
