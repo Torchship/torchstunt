@@ -669,13 +669,13 @@ recycle_waifs(void)
             destroyed_waifs[x.first] = true;
             /* Flag it as destroyed. Now we just wait for the refcount to hit zero so we can free it. */
         }
-        if (refcount(x.first) == 0) {
+        if (refcount(x.first) <= 0) {
             removals.push_back(x.first);
         }
     }
     for (auto x : removals) {
-        free_waif(x);
         destroyed_waifs.erase(x);
+        free_waif(x);
     }
 }
 
