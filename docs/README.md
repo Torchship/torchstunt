@@ -137,7 +137,13 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 ### **Debian/Ubuntu**
 for more info you can see: #temp-anaconda for how we did this for the dev server
 ```bash
-apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev
+apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev gcc-10 gcc-10-base gcc-10-doc g++-10  libstdc++-10-dev libstdc++-10-doc
+For compiling with modern compilers you need to:
+sudo apt install snap
+sudo apt remove --purge cmake
+sudo snap install cmake --classic
+For libzdb support of mysql and postgres:
+sudo apt install libpq-dev libmysqlclient-dev
 For sindome we may need:
 sudo apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libssl-dev libexpat1-dev libzdb-dev
 libzdb manually install (https://www.tildeslash.com/libzdb/#home):
