@@ -81,6 +81,9 @@
 #cmakedefine SQLITE3_FOUND
 #cmakedefine OPENSSL_FOUND
 #cmakedefine EXPAT_FOUND
+#cmakedefine POSTGRESQL_FOUND
+#cmakedefine MYSQL_FOUND
+#cmakedefine SQL_FOUND
 
 #ifndef OPENSSL_FOUND
  #undef USE_TLS
