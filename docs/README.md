@@ -143,15 +143,16 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 
 ## Build Instructions
 ### **Sindome Specific Instructions**
+```bash
 For compiling with modern compilers you need to:
 sudo apt install snap
 sudo apt remove --purge cmake
 sudo snap install cmake --classic
-sudo apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libssl-dev libexpat1-dev
+```
 
 ### **Debian/Ubuntu/WSL**
 ```bash
-apt install build-essential bison gperf cmake libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev
+apt install build-essential bison gperf cmake libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev
 mkdir build && cd build
 cmake ../
 make -j2
