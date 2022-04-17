@@ -54,9 +54,9 @@ PostgreSQL
 As of 3/28/22 this was: 6.4.5, so it needs to be manually compiled.
 ```bash
 git clone https://github.com/jtv/libpqxx.git
-cd libqpxx
-git checkout 7.7.2
-./configure
+cd libpqxx
+git checkout 7.6
+cmake .
 make
 sudo make install
 ```
@@ -65,9 +65,9 @@ sudo make install
 As of 3/28/22 this was: 7.4.1, so it needs to be manually compiled.
 ```bash
 git clone https://github.com/jtv/libpqxx.git
-cd libqpxx
-git checkout 7.7.2
-./configure
+cd libpqxx
+git checkout 7.6
+cmake .
 make
 sudo make install
 ```
@@ -76,9 +76,9 @@ sudo make install
 As of 3/28/22 this was: 7.2.0, so it needs to be manually compiled.
 ```bash
 git clone https://github.com/jtv/libpqxx.git
-cd libqpxx
-git checkout 7.7.2
-./configure
+cd libpqxx
+git checkout 7.6
+cmake .
 make
 sudo make install
 ```
