@@ -56,6 +56,7 @@ As of 3/28/22 this was: 6.4.5, so it needs to be manually compiled.
 git clone https://github.com/jtv/libpqxx.git
 cd libpqxx
 git checkout 7.6
+sudo apt install libpq-dev libpq5
 cmake .
 make
 sudo make install

@@ -144,6 +144,9 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 ## Build Instructions
 ### **Sindome Specific Instructions**
 ```bash
+Dont run the DEBIAN/UBUNTU/WSL instructions again
+Make sure the cmake version being used is snaps.
+
 For compiling with modern compilers you need to:
 sudo apt install snap
 sudo apt remove --purge cmake
