@@ -137,7 +137,7 @@
  * port argument is given on the command line.
  */
 
-#define DEFAULT_PORT    5555
+#define DEFAULT_PORT    7777
 
 /******************************************************************************
  * MP_SELECT   The server will assume that the select() system call exists.
