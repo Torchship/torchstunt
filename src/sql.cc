@@ -125,7 +125,7 @@ class Uri {
             this->full_string = raw_url;
 
             /* Compile the pattern */
-            static const struct pcre_cache_entry *entry = get_pcre("(?<scheme>[^:]+):\\/\\/(?:(?:(?<user>[^:]+):(?<pass>[^@]+))(?=@)@)?(?<host>[^?:/]*)(?::(?<port>\\d+))?(?:\\/(?<path>[^?]+))\?(?<params>.+)", PCRE_CASELESS);
+            struct pcre_cache_entry *entry = get_pcre("(?<scheme>[^:]+):\\/\\/(?:(?:(?<user>[^:]+):(?<pass>[^@]+))(?=@)@)?(?<host>[^?:/]*)(?::(?<port>\\d+))?(?:\\/(?<path>[^?]+))\?(?<params>.+)", PCRE_CASELESS);
 
             /* Determine how many subpatterns match so we can allocate memory. */
             int oveccount = (entry->captures + 1) * 3;
@@ -195,6 +195,7 @@ class SQLSession {
             Var* ret, 
             unsigned char options = 0)      = 0;
         virtual void shutdown()             = 0;
+        virtual bool is_healthy()           = 0;
         void wait() {
             std::unique_lock<std::mutex> lock(busy_mutex);
         }
@@ -228,8 +229,9 @@ class SQLSessionPool {
             std::unique_lock<std::mutex> lock(connections_mutex);
 
             // We're over connection cap, release to get back to cap.
-            if (size() > SQL_SOFT_MAX_CONNECTIONS) {
+            if (size() > SQL_SOFT_MAX_CONNECTIONS || !session->is_healthy()) {
                 expire_connection(session);
+                oklog("  found unhealthy connection\n");
                 return;
             }
 
@@ -242,11 +244,13 @@ class SQLSessionPool {
                 it->second->wait();
                 it->second->shutdown();
                 connections_busy.erase(it);
+                oklog("  found unhealthy busy connection, erased\n");
             }
 
             if (auto it = connections_idle.find(session); it != connections_idle.end()) {
                 it->second->shutdown();
                 connections_idle.erase(it);
+                oklog("  found unhealthy idle connection, erased\n");
             }
         }
 
@@ -276,15 +280,25 @@ class SQLSessionPool {
         std::size_t size_busy() const {
             return connections_busy.size();
         }
+
+        ~SQLSessionPool() {
+            this->stop();
+        }
     
     protected:
         virtual std::unique_ptr<SQLSession> create_connection() = 0;
 
         SQLSession* get_or_create_connection() {
             for (auto&& item : this->connections_idle) {
+                if (!item.first->is_healthy()) {
+                    oklog("  expiring unhealthy connection\n");
+                    expire_connection(item.first);
+                    continue;
+                }
                 return item.first;
             }
 
+            oklog("  creating new connection\n");
             auto connection = create_connection();
             auto result = connection.get();
             connections_idle[result] = std::move(connection);
@@ -322,68 +336,83 @@ class PostgreSQLSession: public SQLSession {
         void query(std::string statement, Var* bind, Var* ret, unsigned char options = 0) {
             std::unique_lock<std::mutex> lock(busy_mutex);
 
-            pqxx::work txn {*connection.get()};
-            pqxx::result res;
-
-            // Code for binding prepared statements.
-            if (bind != nullptr) {
-                pqxx::params p;
-                for (int bind_col=1; bind_col <= bind->v.num; bind_col++) {
-                    switch (bind[bind_col].type) {
-                        case TYPE_STR:
-                            p.append(pqxx::to_string(bind[bind_col].v.str));
-                            break;
-                        case TYPE_INT:
-                        case TYPE_NUMERIC:
-                            p.append(bind[bind_col].v.num);
-                            break;
-                        case TYPE_FLOAT:
-                            p.append(bind[bind_col].v.fnum);
-                            break;
-                        case TYPE_BOOL:
-                            p.append(bind[bind_col].v.truth);
-                            break;
-                    }
-                }
+            try {
+                pqxx::work txn {*connection.get()};
+                pqxx::result res;
                 
-                res = txn.exec_params(statement, p);
-            } else {
-                res = txn.exec(statement);
-            }
-
-            // Get results
-            *ret = new_list(0);
-            for (auto row: res) {
-                Var rv = new_list(0);
-                for (auto col: row) {
-                    char *str = (char*)col.c_str();
-                    Var column;
-
-                    if (!(options & SQL_PARSE_TYPES)) {
-                        if (options & SQL_SANITIZE_STRINGS)
-                            sanitize_string_for_moo(str);
-                        column.type = TYPE_STR;
-                        column.v.str = str_dup(str);
-                    } else {
-                        column = string_to_moo_type(str, options & SQL_PARSE_OBJECTS, options & SQL_SANITIZE_STRINGS);
+                // Code for binding prepared statements.
+                if (bind != nullptr) {
+                    pqxx::params p;
+                    for (int bind_col=1; bind_col <= bind->v.num; bind_col++) {
+                        switch (bind[bind_col].type) {
+                            case TYPE_STR:
+                                p.append(pqxx::to_string(bind[bind_col].v.str));
+                                break;
+                            case TYPE_INT:
+                            case TYPE_NUMERIC:
+                                p.append(bind[bind_col].v.num);
+                                break;
+                            case TYPE_FLOAT:
+                                p.append(bind[bind_col].v.fnum);
+                                break;
+                            case TYPE_BOOL:
+                                p.append(bind[bind_col].v.truth);
+                                break;
+                        }
                     }
-
-                    rv = listappend(rv, column);
+                    
+                    res = txn.exec_params(statement, p);
+                } else {
+                    res = txn.exec(statement);
                 }
-                *ret = listappend(*ret, rv);
-            }
 
-            res.clear();
-            txn.commit();
+                // Get results
+                *ret = new_list(0);
+                for (auto row: res) {
+                    Var rv = new_list(0);
+                    for (auto col: row) {
+                        char *str = (char*)col.c_str();
+                        Var column;
+
+                        if (!(options & SQL_PARSE_TYPES)) {
+                            if (options & SQL_SANITIZE_STRINGS)
+                                sanitize_string_for_moo(str);
+                            column.type = TYPE_STR;
+                            column.v.str = str_dup(str);
+                        } else {
+                            column = string_to_moo_type(str, options & SQL_PARSE_OBJECTS, options & SQL_SANITIZE_STRINGS);
+                        }
+
+                        rv = listappend(rv, column);
+                    }
+                    *ret = listappend(*ret, rv);
+                }
+
+                res.clear();
+                txn.commit();
+            } catch (const pqxx::broken_connection &e) {
+                this->broken_connection = true;
+                throw;
+            } catch (const std::runtime_error& re) {
+                this->broken_connection = true;
+                throw;
+            }
         }
 
         void shutdown() {
-            connection->close();
+            if (!this->broken_connection) {
+                connection->close();
+            }
+        }
+
+        bool is_healthy() {
+            return !this->broken_connection && connection->is_open();
         }
 
     private:
         std::string connection_string;
         std::unique_ptr<pqxx::connection> connection;
+        bool broken_connection = false;
 };
 
 class PostgreSQLSessionPool: public SQLSessionPool {
@@ -489,6 +518,10 @@ class SQLiteSession: public SQLSession {
             sqlite3_close(db);
         }
 
+        bool is_healthy() {
+            return true;
+        }
+
     private:
         sqlite3 *db;
 };
@@ -588,29 +621,37 @@ query_callback(const Var arglist, Var *ret)
     SQLSession* session;
 
     try {
-        session = pool->get_connection();
-        if (nargs < 3 || arglist.v.list[3].v.num < 1) {
-            // There's no SQL parameters.
-            session->query(query, nullptr, ret);
-        } else {
-            // Parameterize the SQL
-            session->query(query, arglist.v.list[3].v.list, ret);
-        }
-
-        // We're done with the connection, let it go back to the pool.
-        pool->release_connection(session);
+        int tries = 0;
+        while (tries < 3) {
+            tries++;
+            try {
+            session = pool->get_connection();
+            if (nargs < 3 || arglist.v.list[3].v.num < 1) {
+                // There's no SQL parameters.
+                session->query(query, nullptr, ret);
+            } else {
+                // Parameterize the SQL
+                session->query(query, arglist.v.list[3].v.list, ret);
+            }
+            // We're done with the connection, let it go back to the pool.
+            pool->release_connection(session);
+            break;
+            } catch (pqxx::sql_error) {
+                oklog("pqxx exception caught");
+                throw;
+            } catch (const std::runtime_error& re) {
+                if (tries >= 3) {
+                    throw;
+                }
+                // We're done with the connection, let it go back to the pool.
+                pool->release_connection(session);
+            } 
+        }        
     } catch (const std::runtime_error& re) {
         auto err = (char*)re.what();
         sanitize_string_for_moo(err);
         *ret = str_dup_to_var(err);
         pool->release_connection(session);
-#ifdef POSTGRESQL_FOUND
-    } catch (pqxx::broken_connection const &e) {
-        // This can happen at literally any time, and be left with a broken connection.
-        // Release the connection object for good.
-        pool->expire_connection(session);
-        *ret = str_dup_to_var("Connection lost to server.");
-#endif
     } catch(...) {
         *ret = str_dup_to_var("Unknown failure encountered.");
         pool->release_connection(session);

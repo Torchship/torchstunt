@@ -49,7 +49,7 @@ CurlReadMemoryCallback(char *dest, size_t size, size_t nmemb, void *userp)
         /* copy as much as possible from the source to the destination */
         size_t copy_this_much = wt->size;
         if(copy_this_much > buffer_size)
-        copy_this_much = buffer_size;
+            copy_this_much = buffer_size;
         memcpy(dest, wt->result, copy_this_much);
     
         wt->result += copy_this_much;
@@ -115,8 +115,8 @@ static void curl_post_thread_callback(Var arglist, Var *ret)
     CurlMemoryStruct chunk;
     CurlMemoryStruct wt;
 
-    wt.result = str_dup(arglist.v.list[2].v.str);
-    wt.size = strlen(str_dup(arglist.v.list[2].v.str));
+    // wt.result = str_dup(arglist.v.list[2].v.str);
+    // wt.size = strlen(wt.result);
     chunk.result = (char*)malloc(1);
     chunk.size = 0;
     
@@ -137,8 +137,9 @@ static void curl_post_thread_callback(Var arglist, Var *ret)
     }
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
-    curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, CurlReadMemoryCallback);
-    curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)&wt);
+    curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, str_dup(arglist.v.list[2].v.str));
+    // curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, CurlReadMemoryCallback);
+    // curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)&wt);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
 
     if (nargs > 1 && is_true(arglist.v.list[2]))

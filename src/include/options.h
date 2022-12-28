@@ -254,8 +254,8 @@
  * Do not set either value to a number less than 1.
  */
 
-#define PATTERN_CACHE_SIZE      20
-#define PCRE_PATTERN_CACHE_SIZE 20
+#define PATTERN_CACHE_SIZE      200
+#define PCRE_PATTERN_CACHE_SIZE 200
 
 /******************************************************************************
  * Prior to 1.8.4 property lookups were required on every reference to a
@@ -494,7 +494,7 @@
  * you can disable this option for a speed boost in larger databases.
  ******************************************************************************
 */
-/*#define SAFE_RECYCLE*/
+#define SAFE_RECYCLE
 
 /******************************************************************************
  * Configurable options for the background subsystem.
@@ -508,7 +508,7 @@
  ******************************************************************************
  */
 
-#define TOTAL_BACKGROUND_THREADS    2
+#define TOTAL_BACKGROUND_THREADS    4
 #define DEFAULT_THREAD_MODE         false
 
 /******************************************************************************

@@ -28,8 +28,8 @@ fi
 if [ -r $1.db.new ]; then
 	mv $1.db $1.db.old
 	mv $1.db.new $1.db
-	rm -f $1.db.old.Z
-	compress $1.db.old &
+	rm -f $1.db.tar.gz
+	tar cvzf $1.db.tar.gz $1.db.old &
 fi
 
 if [ -f $1.log ]; then

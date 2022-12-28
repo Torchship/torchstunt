@@ -30,7 +30,7 @@ RUN cd /toaststunt/build && make -j2
 FROM debian:buster-slim 
 
 # Bring over only necessary packages
-RUN apt update && apt install -y libpq-dev libpq5 libsqlite3-dev libexpat1-dev libaspell-dev libpcre3-dev nettle-dev libcurl4-openssl-dev libargon2-dev libssl-dev 
+RUN apt update && apt install -y tini libpq-dev libpq5 libsqlite3-dev libexpat1-dev libaspell-dev libpcre3-dev nettle-dev libcurl4-openssl-dev libargon2-dev libssl-dev 
 
 # Bring over what we compiled.
 COPY --from=builder \
@@ -40,8 +40,12 @@ COPY --from=builder \
      /usr/local/lib/libpqxx* \
      /usr/local/lib/
 
+# Add Tini
+ENTRYPOINT ["/tini", "--"]
+
 # A special restart which output on stdout is needed for docker
 COPY docker_restart.sh /toaststunt/
 RUN chmod +x /toaststunt/docker_restart.sh
 EXPOSE 7777
-ENTRYPOINT cd /toaststunt/ ;  ./docker_restart.sh /cores/$CORE_TO_LOAD
+WORKDIR /toaststunt/
+CMD ["./docker_restart", "/cores/${CORE_TO_LOAD}"]
