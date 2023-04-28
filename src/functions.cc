@@ -62,19 +62,20 @@ static registry bi_function_registries[] =
     register_tasks,
     register_verbs,
     register_yajl,
+    register_xml,
     register_base64,
     register_fileio,
     register_system,
     register_exec,
     register_crypto,
-    register_sqlite,
     register_pcre,
     register_background,
     register_waif,
     register_simplexnoise,
     register_argon2,
     register_spellcheck,
-    register_curl
+    register_curl,
+    register_sql
 };
 
 void

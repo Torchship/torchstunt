@@ -16,13 +16,21 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
 
 ## Features
 
-- SQLite
 - Perl Compatible Regular Expressions (PCRE)
 - Simplex Noise
 - [Argon2id Hashing](https://github.com/P-H-C/phc-winner-argon2)
 - 64-bit Integers (with the choice to fall back to 32-bit integers; $maxint and $minint set automatically)
 - HAProxy Source IP Rewriting (see notes below if you need to disable this)
 - User friendly traceback error messages
+
+- SQL Support
+    - Completely optional, can be compiled without any SQL servers
+    - One built-in interface for all SQL implementations
+    - Non-blocking query and execute calls when background threads are enabled
+    - Manage, open, and close connections through built-ins
+    - Parameterized SQL support for sanitizing user input
+    - Support for SQLite V3
+    - Support for PostgreSQL
 
 - Networking improvements:
     - IPv6 connection support
@@ -134,19 +142,20 @@ ToastStunt is a fork of the LambdaMOO / Stunt server. It has a number of feature
     - Allow handling of SIGUSR signals in the database with `#0:handle_signal()`
 
 ## Build Instructions
-### **Debian/Ubuntu**
+### **Sindome Specific Instructions**
 ```bash
-apt install build-essential bison gperf cmake libsqlite3-dev libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev
-mkdir build && cd build
-cmake ../
-make -j2
+Dont run the DEBIAN/UBUNTU/WSL instructions again
+Make sure the cmake version being used is snaps.
+
+For compiling with modern compilers you need to:
+sudo apt install snap
+sudo apt remove --purge cmake
+sudo snap install cmake --classic
 ```
 
-### **REL/CentOS**
+### **Debian/Ubuntu/WSL**
 ```bash
-yum group install -y "Development Tools"
-yum install -y sqlite-devel pcre-devel aspell-devel nettle-devel gperf centos-release-scl
-yum install -y devtoolset-7
+apt install build-essential bison gperf cmake libaspell-dev libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev libexpat1-dev
 mkdir build && cd build
 cmake ../
 make -j2
@@ -154,7 +163,7 @@ make -j2
 
 ### **Gentoo**
 ```bash
-emerge dev-db/sqlite app-text/aspell app-dicts/aspell-en app-crypt/argon2 cmake
+emerge app-text/aspell app-dicts/aspell-en app-crypt/argon2 cmake
 mkdir build && cd build
 cmake ../
 make -j2
@@ -162,7 +171,7 @@ make -j2
 
 ### **FreeBSD**
 ```bash
-pkg install bison gperf gcc cmake sqlite3 aspell pcre nettle libargon2
+pkg install bison gperf gcc cmake aspell pcre nettle libargon2
 mkdir build && cd build
 cmake ../
 make -j2
