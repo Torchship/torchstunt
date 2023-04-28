@@ -664,9 +664,9 @@ recycle_waifs(void)
 
     std::vector<Waif*> removals;
     for (auto &x : destroyed_waifs) {
-        if (destroyed_waifs[x.first] == false) {
+        if (x.second == false) {
             run_server_task(-1, Var::new_waif(x.first), waif_recycle_verb, new_list(0), "", nullptr);
-            destroyed_waifs[x.first] = true;
+            x.second = true;
             /* Flag it as destroyed. Now we just wait for the refcount to hit zero so we can free it. */
         }
         if (refcount(x.first) <= 0) {
@@ -689,13 +689,30 @@ recycle_waifs(void)
 void
 write_values_pending_finalization(void)
 {
-    dbio_printf("%" PRIdN " values pending finalization\n", pending_count);
+    /* In order to get an accurate count, we have to iterate through destroyed_waifs twice.
+       The first time to ascertain which waifs haven't already had their recycle verb called,
+       the second time to add them to the list. If this proves problematic, we might have to
+       trade off speed for some slightly increased memory usage with waif flags. However,
+       I really don't see any database having enough waifs pending recycling for this to make
+       any impact whatsoever. */
+
+    unsigned int pending_waif_count = 0;
+    for (auto &x : destroyed_waifs)
+        if (x.second == false)
+            pending_waif_count++;
+    
+    dbio_printf("%" PRIdN " values pending finalization\n", pending_count + pending_waif_count);
 
     struct pending_recycle *head = pending_head;
 
     while (head) {
         dbio_write_var(head->v);
         head = head->next;
+    }
+
+    for (auto &x : destroyed_waifs) {
+        if (x.second == false)
+            dbio_write_var(Var::new_waif(x.first));
     }
 }
 
@@ -732,7 +749,7 @@ main_loop(void)
 {
     int i;
 
-    /* First, queue anonymous objects */
+    /* First, queue anonymous objects and WAIFs */
     for (i = 1; i <= pending_list.v.list[0].v.num; i++) {
         Var v;
 
@@ -740,11 +757,20 @@ main_loop(void)
 
         /* in theory this could be any value... */
         /* in practice this will be an anonymous object... */
-        assert(TYPE_ANON == v.type);
+        /*... until now! It can also be a WAIF. */
+        assert(v.type == TYPE_ANON || v.type == TYPE_WAIF);
 
-        if (v.v.anon != nullptr)
-            queue_anonymous_object(var_ref(v));
+    switch (v.type) {
+        case TYPE_ANON:
+            if (v.v.anon != nullptr)
+                queue_anonymous_object(var_ref(v));
+            break;
+        case TYPE_WAIF:
+            if (v.v.waif != nullptr && destroyed_waifs.count(v.v.waif) == 0)
+                destroyed_waifs[v.v.waif] = false;
+        }
     }
+
     free_var(pending_list);
 
     /* Second, notify DB of disconnections for all checkpointed connections */
@@ -1272,19 +1298,23 @@ do_script_file(const char *path)
 {
     Var str;
     Var code = new_list(0);
-    std::ifstream file(path);
-    std::string line;
 
+    std::ifstream file(path);
     if (!file.is_open()) {
         panic_moo(strerror(errno));
     }
+
+    std::string line;
     while (std::getline(file, line)) {
         str = str_dup_to_var(raw_bytes_to_clean(line.c_str(), line.size()));
         code = listappend(code, str);
     }
-    if (errno) {
+
+    if (!file.eof()) {
         panic_moo(strerror(errno));
     }
+
+    file.close();
 
     run_do_start_script(code);
 }
@@ -1575,7 +1605,10 @@ proxy_connected(Objid connection, char *command)
             }
             split = strtok(nullptr, " ");
         }
+        lock_connection_name_mutex(existing_h->nhandle);
         const char *old_name = str_dup(network_connection_name(existing_h->nhandle));   // rewrite is going to free this
+        unlock_connection_name_mutex(existing_h->nhandle);
+        
         int rw = rewrite_connection_name(existing_h->nhandle, destination, destination_port, source, source_port);
         if (rw != 0) {
             errlog("PROXY: Proxy rewrite failed.\n");
@@ -2558,6 +2591,7 @@ bf_open_network_connection(Var arglist, Byte next, void *vdata, Objid progr)
 #ifdef USE_TLS
         if (maplookup(options, tls_key, &value, 0) != nullptr && is_true(value)) {
             if (!tls_ctx) {
+                var_ref(value);
                 free_var(arglist);
                 return make_raise_pack(E_PERM, "TLS is not enabled", value);
             }
@@ -2573,6 +2607,7 @@ bf_open_network_connection(Var arglist, Byte next, void *vdata, Objid progr)
 
         if (maplookup(options, listener_key, &value, 0) != nullptr) {
             if (value.type != TYPE_OBJ) {
+                var_ref(value);
                 free_var(arglist);
                 return make_raise_pack(E_TYPE, "listener should be an object", value);
             }
@@ -2899,6 +2934,7 @@ bf_connection_info(Var arglist, Byte next, void *vdata, Objid progr)
     static Var dest_ip =  str_dup_to_var("destination_ip");
     static Var dest_port =  str_dup_to_var("destination_port");
     static Var protocol =   str_dup_to_var("protocol");
+    static Var is_outbound = str_dup_to_var("outbound");
 
     network_handle nh = h->nhandle;
 
@@ -2912,6 +2948,7 @@ bf_connection_info(Var arglist, Byte next, void *vdata, Objid progr)
     ret = mapinsert(ret, var_ref(dest_port), Var::new_int(network_port(nh)));
     ret = mapinsert(ret, var_ref(dest_ip), str_ref_to_var(network_ip_address(nh)));
     ret = mapinsert(ret, var_ref(protocol), str_dup_to_var(network_protocol(nh)));
+    ret = mapinsert(ret, var_ref(is_outbound), Var::new_int(h->outbound));
 #ifdef USE_TLS
     ret = mapinsert(ret, var_ref(tls_key), tls_connection_info(nh));
 #endif

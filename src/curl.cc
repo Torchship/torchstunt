@@ -66,9 +66,13 @@ static void curl_thread_callback(Var arglist, Var *ret)
     CURL *curl_handle;
     CURLcode res;
     CurlMemoryStruct chunk;
+    long timeout = CURL_TIMEOUT;
 
     chunk.result = (char*)malloc(1);
     chunk.size = 0;
+    
+    if (nargs > 2)
+        timeout = arglist.v.list[3].v.num;
 
     curl_handle = curl_easy_init();
     curl_easy_setopt(curl_handle, CURLOPT_URL, arglist.v.list[1].v.str);
@@ -76,9 +80,11 @@ static void curl_thread_callback(Var arglist, Var *ret)
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, timeout);
 
     if (nargs > 1 && is_true(arglist.v.list[2]))
         curl_easy_setopt(curl_handle, CURLOPT_HEADER, 1L);
+    
 
     res = curl_easy_perform(curl_handle);
 
@@ -176,17 +182,17 @@ bf_url_encode(Var arglist, Byte next, void *vdata, Objid progr)
     Var r;
     const char *url = arglist.v.list[1].v.str;
 
-    free_var(arglist);
-
     char *encoded = curl_easy_escape(curl_handle, url, memo_strlen(url));
 
     if (encoded == nullptr) {
+        free_var(arglist);
         return make_error_pack(E_INVARG);
     }
 
     r.type = TYPE_STR;
     r.v.str = str_dup(encoded);
 
+    free_var(arglist);
     curl_free(encoded);
 
     return make_var_pack(r);
@@ -198,17 +204,17 @@ bf_url_decode(Var arglist, Byte next, void *vdata, Objid progr)
     Var r;
     const char *url = arglist.v.list[1].v.str;
 
-    free_var(arglist);
-
     char *decoded = curl_easy_unescape(curl_handle, url, memo_strlen(url), nullptr);
 
     if (decoded == nullptr) {
+        free_var(arglist);
         return make_error_pack(E_INVARG);
     }
 
     r.type = TYPE_STR;
     r.v.str = str_dup(decoded);
 
+    free_var(arglist);
     curl_free(decoded);
 
     return make_var_pack(r);

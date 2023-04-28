@@ -1,6 +1,6 @@
 # ToastStunt ChangeLog
 
-## 2.7.0 (In Progress)
+## 2.7.0 (Mar 5, 2023)
 ### Bug Fixes
 - Fix a memory leak in `open_network_connection()` that occurred after a successful connection.
 - Fix a bug where the SERVER FULL message wouldn't display the connection name properly.
@@ -20,6 +20,9 @@
 - Add a ceiling to `ctime()` to prevent overflows with large integer arguments.
 - Fix an issue where friendly tracebacks involving non-existent properties on waifs could crash the server.
 - Fix an issue where waifs could get stuck "recycling" forever.
+- Fix an issue with start scripts causing a panic, typically with 'no such file or directory' when, in fact, a file does exist.
+- Uninstantiated waifs that haven't had their recycle verb called before a shutdown now save their state so they can recycle properly the next time the server starts.
+- Legacy `connection_name()` now correctly says 'to' instead of 'from' when a connection is outbound.
 
 ### New Features
 - Support TLS / SSL connections in both `listen()` and `open_network_connection()`. Certificate and key can be configured in options.h, specifed as command-line arguments, or given as arguments to in-MOO functions. See warnings at the end of this changelog for important information about these changes.
@@ -32,6 +35,8 @@
     - New arguments have been added to override defines in `options.h`. These include: `--tls-cert`, `--tls-key`, `--file-dir`, `--exec-dir`
     - You can now specify as many initial listeners as you want. Use `-p` for a standard port or `-t` for a TLS port. (e.g. `./moo db db2 -p 7777 -t 7443 -p 8888 -t 8443`)
     - A full list of arguments is now available by supplying `--help`.
+- Added CURL_TIMEOUT to options.h to specify the maximum amount of time a CURL request can take before failing. For special circumstances, you can specify a longer or shorter timeout with a new third argument to the `curl()` builtin.
+- Added an 'outbound' field to `connection_info()` that indicates whether a connection is outbound or not.
 
 ### *** COMPATIBILITY WARNINGS ***
 - The arguments for `listen()` have changed! Listen now accepts an optional third argument as a map. This map takes over the previous arguments and has the keys: ipv6, tls, certificate, key, print-messages. So if you wanted everything, you would use: `listen(#0, 1234, ["ipv6" -> 1, "tls" -> 1, "certificate" -> "/etc/certs/something.pem", "key" -> "/etc/certs/privkey.pem", "print-messages" -> 1]`
@@ -405,3 +410,8 @@
 - Added SQLite support.
 - Add PCRE support.
 - Add additional entropy by default.
+
+## Pre-ToastStunt
+- [LambdaMOO](Legacy/ChangeLogs/ChangeLog-LambdaMOO.txt)
+- [FileIO](Legacy/ChangeLogs/ChangeLog-FileIO.txt)
+- [LambdaMOO 1.8.0r8 'rogue' Patches](Legacy/ChangeLogs/ChangeLog-rX.txt)

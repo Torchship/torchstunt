@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.11)
 set(VERSION_MAJOR 2)
 set(VERSION_MINOR 7)
 set(VERSION_RELEASE 0)
-set(VERSION_EXT "_38")
+set(VERSION_EXT "")
 project(ToastStunt VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_RELEASE} LANGUAGES CXX C)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
@@ -16,6 +16,14 @@ find_package(gperf REQUIRED)
 EXECUTE_PROCESS( COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE )
 if(APPLE AND ${ARCHITECTURE} STREQUAL "arm64")
     set(APPLE_SILICON_FOUND 1)
+endif()
+
+# Check for a virtualized container
+if(EXISTS "/proc/1/cgroup")
+    file(READ "/proc/1/cgroup" CGROUPS)
+    string(REGEX MATCH ".*(docker|lxc).*" IN_A_CONTAINER ${CGROUPS})
+else()
+    set(IN_A_CONTAINER 0)
 endif()
 
 # Where to find header files
@@ -49,9 +57,9 @@ set(CMAKE_C_STANDARD 17)
 
 # These flags are shared by the RELEASE and WARN build types.
 set(SHARED_COMPILE_FLAGS "-O3")
-if(NOT APPLE_SILICON_FOUND)
+if(NOT APPLE_SILICON_FOUND AND NOT IN_A_CONTAINER)
     set(SHARED_COMPILE_FLAGS "${SHARED_COMPILE_FLAGS} -march=native")
-else()
+elseif(APPLE_SILICON_FOUND)
     set(SHARED_COMPILE_FLAGS "${SHARED_COMPILE_FLAGS} -mcpu=apple-m1")
 endif()
 
