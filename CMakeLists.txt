@@ -226,7 +226,6 @@ set(src_CXXSRCS
     src/pattern.cc
     src/program.cc
     src/property.cc
-    src/quota.cc
     src/server.cc
     src/storage.cc
     src/streams.cc

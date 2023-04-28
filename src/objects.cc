@@ -25,7 +25,6 @@
 #include "functions.h"
 #include "list.h"
 #include "numbers.h"
-#include "quota.h"
 #include "server.h"
 #include "storage.h"
 #include "structures.h"
@@ -381,63 +380,57 @@ bf_create(Var arglist, Byte next, void *vdata, Objid progr)
             return make_error_pack(E_PERM);
         }
 
-        if (valid(owner) && !decr_quota(owner)) {
+        enum error e;
+        Objid last = db_last_used_objid();
+        Objid oid = db_create_object(-1);
+        Var args;
+
+        db_set_object_owner(oid, !valid(owner) ? oid : owner);
+
+        if (!db_change_parents(Var::new_obj(oid), arglist.v.list[1], none)) {
+            db_destroy_object(oid);
+            db_set_last_used_objid(last);
             free_var(arglist);
-            return make_error_pack(E_QUOTA);
+            return make_error_pack(E_INVARG);
         }
-        else {
-            enum error e;
-            Objid last = db_last_used_objid();
-            Objid oid = db_create_object(-1);
-            Var args;
 
-            db_set_object_owner(oid, !valid(owner) ? oid : owner);
-
-            if (!db_change_parents(Var::new_obj(oid), arglist.v.list[1], none)) {
-                db_destroy_object(oid);
-                db_set_last_used_objid(last);
-                free_var(arglist);
-                return make_error_pack(E_INVARG);
-            }
-
-            /*
-             * If anonymous, clean up the object used to create the
-             * anonymous object; `oid' is invalid after that.
-             */
-            if (anonymous) {
-                r.type = TYPE_ANON;
-                r.v.anon = db_make_anonymous(oid, last);
-            } else {
-                r.type = TYPE_OBJ;
-                r.v.obj = oid;
-            }
-
-            data = (Var *)alloc_data(sizeof(Var));
-            *data = var_ref(r);
-
-            /* pass in initializer args, if present */
-            args = init > 0 ? var_ref(arglist.v.list[init]) : new_list(0);
-
-            free_var(arglist);
-
-            e = call_verb(oid, "initialize", r, args, 0);
-            /* e will not be E_INVIND */
-
-            if (e == E_NONE) {
-                free_var(r);
-                return make_call_pack(2, data);
-            }
-
-            free_var(*data);
-            free_data(data);
-            free_var(args);
-
-            if (e == E_MAXREC) {
-                free_var(r);
-                return make_error_pack(e);
-            } else      /* (e == E_VERBNF) do nothing */
-                return make_var_pack(r);
+        /*
+            * If anonymous, clean up the object used to create the
+            * anonymous object; `oid' is invalid after that.
+            */
+        if (anonymous) {
+            r.type = TYPE_ANON;
+            r.v.anon = db_make_anonymous(oid, last);
+        } else {
+            r.type = TYPE_OBJ;
+            r.v.obj = oid;
         }
+
+        data = (Var *)alloc_data(sizeof(Var));
+        *data = var_ref(r);
+
+        /* pass in initializer args, if present */
+        args = init > 0 ? var_ref(arglist.v.list[init]) : new_list(0);
+
+        free_var(arglist);
+
+        e = call_verb(oid, "initialize", r, args, 0);
+        /* e will not be E_INVIND */
+
+        if (e == E_NONE) {
+            free_var(r);
+            return make_call_pack(2, data);
+        }
+
+        free_var(*data);
+        free_data(data);
+        free_var(args);
+
+        if (e == E_MAXREC) {
+            free_var(r);
+            return make_error_pack(e);
+        } else      /* (e == E_VERBNF) do nothing */
+            return make_var_pack(r);
     } else {            /* next == 2, returns from initialize verb_call */
         r = var_ref(*data);
         free_var(*data);
@@ -471,47 +464,41 @@ bf_recreate(Var arglist, Byte next, void *vdata, Objid progr)
             return make_error_pack(E_PERM);
         }
 
-        if (valid(owner) && !decr_quota(owner)) {
+        enum error e;
+        Objid oid = db_create_object(arglist.v.list[1].v.obj);
+
+        db_set_object_owner(oid, !valid(owner) ? oid : owner);
+
+        if (!db_change_parents(Var::new_obj(oid), arglist.v.list[2], none)) {
+            db_destroy_object(oid);
             free_var(arglist);
-            return make_error_pack(E_QUOTA);
+            return make_error_pack(E_INVARG);
         }
-        else {
-            enum error e;
-            Objid oid = db_create_object(arglist.v.list[1].v.obj);
 
-            db_set_object_owner(oid, !valid(owner) ? oid : owner);
+        free_var(arglist);
 
-            if (!db_change_parents(Var::new_obj(oid), arglist.v.list[2], none)) {
-                db_destroy_object(oid);
-                free_var(arglist);
-                return make_error_pack(E_INVARG);
-            }
+        r.type = TYPE_OBJ;
+        r.v.obj = oid;
 
-            free_var(arglist);
+        data = (Var *)alloc_data(sizeof(Var));
+        *data = var_ref(r);
 
-            r.type = TYPE_OBJ;
-            r.v.obj = oid;
+        e = call_verb(oid, "initialize", r, new_list(0), 0);
+        /* e will not be E_INVIND */
 
-            data = (Var *)alloc_data(sizeof(Var));
-            *data = var_ref(r);
-
-            e = call_verb(oid, "initialize", r, new_list(0), 0);
-            /* e will not be E_INVIND */
-
-            if (e == E_NONE) {
-                free_var(r);
-                return make_call_pack(2, data);
-            }
-
-            free_var(*data);
-            free_data(data);
-
-            if (e == E_MAXREC) {
-                free_var(r);
-                return make_error_pack(e);
-            } else      /* (e == E_VERBNF) do nothing */
-                return make_var_pack(r);
+        if (e == E_NONE) {
+            free_var(r);
+            return make_call_pack(2, data);
         }
+
+        free_var(*data);
+        free_data(data);
+
+        if (e == E_MAXREC) {
+            free_var(r);
+            return make_error_pack(e);
+        } else      /* (e == E_VERBNF) do nothing */
+            return make_var_pack(r);
     } else {            /* next == 2, returns from initialize verb_call */
         r = var_ref(*data);
         free_var(*data);
@@ -867,7 +854,6 @@ moving_contents:
                 db_fixup_owners(obj.v.obj);
 #endif
 
-                incr_quota(db_object_owner(oid));
 
                 db_destroy_object(oid);
 
@@ -884,7 +870,6 @@ moving_contents:
                  */
                 /*db_change_parents(obj, nothing, none);*/
 
-                incr_quota(db_object_owner2(obj));
 
                 db_destroy_anonymous_object(obj.v.anon);
 

@@ -32,7 +32,6 @@
 #include "map.h"
 #include "match.h"
 #include "numbers.h"
-#include "quota.h"
 #include "server.h"
 #include "storage.h"
 #include "streams.h"
@@ -197,7 +196,6 @@ complex_free_var(Var v)
                             myfree(v.v.anon, M_ANON);
                     }
                     else if (db_object_has_flag2(v, FLAG_INVALID)) {
-                        incr_quota(db_object_owner2(v));
                         db_destroy_anonymous_object(v.v.anon);
                         gc_set_color(v.v.anon, GC_BLACK);
                         if (!gc_is_buffered(v.v.anon))
@@ -248,7 +246,6 @@ complex_free_var(Var v)
                     myfree(v.v.anon, M_ANON);
                 }
                 else if (db_object_has_flag2(v, FLAG_INVALID)) {
-                    incr_quota(db_object_owner2(v));
                     db_destroy_anonymous_object(v.v.anon);
                     myfree(v.v.anon, M_ANON);
                 }

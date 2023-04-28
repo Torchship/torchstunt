@@ -62,7 +62,6 @@
 #include "numbers.h"
 #include "options.h"
 #include "parser.h"
-#include "quota.h"
 #include "random.h"
 #include "server.h"
 #include "storage.h"
@@ -641,8 +640,6 @@ recycle_anonymous_objects(void)
          * changes in parentage.
          */
         /*db_change_parents(v, nothing, none);*/
-
-        incr_quota(db_object_owner2(v));
 
         db_destroy_anonymous_object(v.v.anon);
 
