@@ -1020,52 +1020,6 @@ bf_isa(Var arglist, Byte next, void *vdata, Objid progr)
     return ret;
 }
 
-/* Locate an object in the database by name more quickly than is possible in-DB.
- * To avoid numerous list reallocations, we put everything in a vector and then
- * transfer it over to a list when we know how many values we have. */
-void locate_by_name_thread_callback(Var arglist, Var *ret)
-{
-    Var name, object;
-    object.type = TYPE_OBJ;
-    std::vector<int> tmp;
-
-    const int case_matters = arglist.v.list[0].v.num < 2 ? 0 : is_true(arglist.v.list[2]);
-    const int string_length = memo_strlen(arglist.v.list[1].v.str);
-
-    const Objid last_objid = db_last_used_objid();
-    for (int x = 0; x <= last_objid; x++)
-    {
-        if (!valid(x))
-            continue;
-
-        object.v.obj = x;
-        db_find_property(object, "name", &name);
-        if (strindex(name.v.str, memo_strlen(name.v.str), arglist.v.list[1].v.str, string_length, case_matters))
-            tmp.push_back(x);
-    }
-
-    *ret = new_list(tmp.size());
-    const auto vector_size = tmp.size();
-    for (size_t x = 0; x < vector_size; x++) {
-        ret->v.list[x + 1] = Var::new_obj(tmp[x]);
-    }
-}
-
-static package
-bf_locate_by_name(Var arglist, Byte next, void *vdata, Objid progr)
-{
-    if (!is_wizard(progr))
-    {
-        free_var(arglist);
-        return make_error_pack(E_PERM);
-    }
-
-    char *human_string = nullptr;
-    asprintf(&human_string, "locate_by_name: \"%s\"", arglist.v.list[1].v.str);
-
-    return background_thread(locate_by_name_thread_callback, &arglist, human_string);
-}
-
 static bool multi_parent_isa(const Var *object, const Var *parents)
 {
     if (parents->type == TYPE_OBJ)
@@ -1076,45 +1030,6 @@ static bool multi_parent_isa(const Var *object, const Var *parents)
             return true;
 
     return false;
-}
-
-/* Return a list of objects of parent, optionally with a player flag set.
- * With only one argument, player flag is assumed to be the only condition.
- * With two arguments, parent is the only condition.
- * With three arguments, parent is checked first and then the player flag is checked.
- * occupants(LIST objects, OBJ | LIST parent, ?INT player flag set)
- */
-static package
-bf_occupants(Var arglist, Byte next, void *vdata, Objid progr)
-{   /* (object) */
-    Var ret = new_list(0);
-    int nargs = arglist.v.list[0].v.num;
-    Var contents = arglist.v.list[1];
-    int content_length = contents.v.list[0].v.num;
-    bool check_parent = nargs == 1 ? false : true;
-    Var parent = check_parent ? arglist.v.list[2] : nothing;
-    bool check_player_flag = (nargs == 1 || (nargs > 2 && is_true(arglist.v.list[3])));
-
-    if (check_parent && !is_obj_or_list_of_objs(parent)) {
-        free_var(arglist);
-        return make_error_pack(E_TYPE);
-    }
-    else if (!is_list_of_objs(contents) || !all_valid(contents)) {
-        free_var(arglist);
-        return make_error_pack(E_INVARG);
-    }
-
-    for (int x = 1; x <= content_length; x++) {
-        Objid oid = contents.v.list[x].v.obj;
-        if ((!check_parent ? 1 : multi_parent_isa(&contents.v.list[x], &parent))
-                && (!check_player_flag || (check_player_flag && is_user(oid))))
-        {
-            ret = setadd(ret, contents.v.list[x]);
-        }
-    }
-
-    free_var(arglist);
-    return make_var_pack(ret);
 }
 
 /* Return a list of nested locations for an object.
@@ -1242,8 +1157,6 @@ register_objects(void)
                                       bf_move_read, bf_move_write,
                                       TYPE_OBJ, TYPE_OBJ, TYPE_INT);
     register_function("isa", 2, 3, bf_isa, TYPE_ANY, TYPE_ANY, TYPE_INT);
-    register_function("locate_by_name", 1, 2, bf_locate_by_name, TYPE_STR, TYPE_INT);
-    register_function("occupants", 1, 3, bf_occupants, TYPE_LIST, TYPE_ANY, TYPE_INT);
     register_function("locations", 1, 3, bf_locations, TYPE_OBJ, TYPE_OBJ, TYPE_INT);
     register_function("recycled_objects", 0, 0, bf_recycled_objects);
     register_function("next_recycled_object", 0, 1, bf_next_recycled_object, TYPE_OBJ);
