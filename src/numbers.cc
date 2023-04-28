@@ -859,67 +859,6 @@ bf_floatstr(Var arglist, Byte next, void *vdata, Objid progr)
     return make_var_pack(r);
 }
 
-/* Calculates the distance between two n-dimensional sets of coordinates. */
-static package
-bf_distance(Var arglist, Byte next, void *vdata, Objid progr)
-{
-    double ret = 0.0, tmp = 0.0;
-    int count;
-
-    const Num list_length = arglist.v.list[1].v.list[0].v.num;
-    for (count = 1; count <= list_length; count++)
-    {
-        if ((arglist.v.list[1].v.list[count].type != TYPE_INT && arglist.v.list[1].v.list[count].type != TYPE_FLOAT) || (arglist.v.list[2].v.list[count].type != TYPE_INT && arglist.v.list[2].v.list[count].type != TYPE_FLOAT))
-        {
-            free_var(arglist);
-            return make_error_pack(E_TYPE);
-        }
-        else
-        {
-            tmp = (arglist.v.list[2].v.list[count].type == TYPE_INT ? (double)arglist.v.list[2].v.list[count].v.num : arglist.v.list[2].v.list[count].v.fnum) - (arglist.v.list[1].v.list[count].type == TYPE_INT ? (double)arglist.v.list[1].v.list[count].v.num : arglist.v.list[1].v.list[count].v.fnum);
-            ret = ret + (tmp * tmp);
-        }
-    }
-
-    free_var(arglist);
-
-    return make_var_pack(Var::new_float(sqrt(ret)));
-}
-
-/* Calculates the bearing between two sets of three dimensional floating point coordinates. */
-static package
-bf_relative_heading(Var arglist, Byte next, void *vdata, Objid progr)
-{
-    if (arglist.v.list[1].v.list[1].type != TYPE_FLOAT || arglist.v.list[1].v.list[2].type != TYPE_FLOAT || arglist.v.list[1].v.list[3].type != TYPE_FLOAT || arglist.v.list[2].v.list[1].type != TYPE_FLOAT || arglist.v.list[2].v.list[2].type != TYPE_FLOAT || arglist.v.list[2].v.list[3].type != TYPE_FLOAT) {
-        free_var(arglist);
-        return make_error_pack(E_TYPE);
-    }
-
-    double dx = arglist.v.list[2].v.list[1].v.fnum - arglist.v.list[1].v.list[1].v.fnum;
-    double dy = arglist.v.list[2].v.list[2].v.fnum - arglist.v.list[1].v.list[2].v.fnum;
-    double dz = arglist.v.list[2].v.list[3].v.fnum - arglist.v.list[1].v.list[3].v.fnum;
-
-    double xy = 0.0;
-    double z = 0.0;
-
-    xy = atan2(dy, dx) * 57.2957795130823;
-
-    if (xy < 0.0)
-        xy = xy + 360.0;
-
-    z = atan2(dz, sqrt((dx * dx) + (dy * dy))) * 57.2957795130823;
-
-    Var s = new_list(2);
-    s.v.list[1].type = TYPE_INT;
-    s.v.list[1].v.num = (int)xy;
-    s.v.list[2].type = TYPE_INT;
-    s.v.list[2].v.num = (int)z;
-
-    free_var(arglist);
-
-    return make_var_pack(s);
-}
-
 Var zero;           /* useful constant */
 
 void
@@ -967,8 +906,4 @@ register_numbers(void)
     register_function("ceil", 1, 1, bf_ceil, TYPE_FLOAT);
     register_function("floor", 1, 1, bf_floor, TYPE_FLOAT);
     register_function("trunc", 1, 1, bf_trunc, TYPE_FLOAT);
-
-    /* Possibly misplaced functions... */
-    register_function("distance", 2, 2, bf_distance, TYPE_LIST, TYPE_LIST);
-    register_function("relative_heading", 2, 2, bf_relative_heading, TYPE_LIST, TYPE_LIST);
 }

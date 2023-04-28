@@ -340,27 +340,6 @@ const char *file_resolve_path(const char *pathname) {
 
 
 /***************************************************************
- * Built in functions
- * file_version
- ***************************************************************/
-
-static package
-bf_file_version(Var arglist, Byte next, void *vdata, Objid progr)
-{
-    char tmpbuffer[50];
-    Var rv;
-
-    sprintf(tmpbuffer, "%s/%s", file_package_name, file_package_version);
-
-    rv.type = TYPE_STR;
-    rv.v.str = str_dup(tmpbuffer);
-
-    return make_var_pack(rv);
-
-}
-
-
-/***************************************************************
  * File open and close.
  ***************************************************************/
 
@@ -1590,7 +1569,6 @@ register_fileio(void)
 {
 #if FILE_IO
 
-    register_function("file_version", 0, 0, bf_file_version);
     register_function("file_handles", 0, 0, bf_file_handles);
 
     register_function("file_open", 2, 2, bf_file_open, TYPE_STR, TYPE_STR);

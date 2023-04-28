@@ -235,7 +235,6 @@ set(src_CXXSRCS
     src/pcre_moo.cc
     src/background.cc
     src/waif.cc
-    src/simplexnoise.cc
     src/argon2.cc
     src/spellcheck.cc
     src/curl.cc)

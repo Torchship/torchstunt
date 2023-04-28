@@ -132,14 +132,9 @@
         This is raised when any of these functions are called with non-
         wizardly permissions.
 
-  3.2.  Version
+  3.2.  [REDACTED]
 
-  Function: STR file_version()
-
-  Returns the package shortname/version number of this package e.g.
-
-         ;file_version()
-         => "FIO/1.5p3"
+  <Removed> 
 
   3.3.  Opening and closing of files and related functions
 
