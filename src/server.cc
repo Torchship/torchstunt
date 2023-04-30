@@ -3343,7 +3343,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         token.word += c;
     }
 
-    if (!token.empty()) {
+    if (!token.empty() || !token.word.empty()) {
         // end of the buffer
         token.commit();
         tokens.push_back(token);
