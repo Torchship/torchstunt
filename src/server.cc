@@ -3148,6 +3148,7 @@ enum class token_op {
     VERB,
     TARGET,
     POSSESSIVE_TARGET,
+    REFLEXIVE_TARGET,
     MACRO,
     SPEECH
 };
@@ -3161,7 +3162,9 @@ const char* enum_to_c_str(token_op op) {
         case token_op::TARGET:
             return "TARGET";
         case token_op::POSSESSIVE_TARGET:
-            return "POSESSIVE_TARGET";
+            return "POSSESSIVE_TARGET";
+        case token_op::REFLEXIVE_TARGET:
+            return "REFLEXIVE_TARGET";
         case token_op::MACRO:
             return "MACRO";
         case token_op::SPEECH:
@@ -3208,29 +3211,21 @@ static bool isSelfPronoun(std::string word) {
     }
 }
 
-static bool isPossessivePronoun(std::string word) {
-    // Convert word to lowercase
-    transform(word.begin(), word.end(), word.begin(), ::tolower);
-
-    if (word == "your" || word == "his" || word == "her" || word == "its"
-        || word == "our" || word == "their" || word == "whose") {
-        return true;
-    } else {
-        return false;
-    }
+static bool isPronoun(std::string word) {
+    std::vector<std::string> pronouns = {"I", "me", "my", "you", "he", "she", "it", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", "who", "whom", "whose", "what", "which", "whoever", "whomever"};
+    return (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
 }
 
-static bool isPersonalPronoun(std::string word) {
-    // Convert word to lowercase
-    transform(word.begin(), word.end(), word.begin(), ::tolower);
-
-    if (word == "i" || word == "you" || word == "he" || word == "she" ||
-        word == "it" || word == "they") {
-        return true;
-    } else {
-        return false;
-    }
+bool isPossessivePronoun(std::string word) {
+    std::vector<std::string> possessivePronouns = {"my", "your", "his", "her", "its", "our", "their", "whose"};
+    return (find(possessivePronouns.begin(), possessivePronouns.end(), word) != possessivePronouns.end());
 }
+
+bool isReflexivePronoun(std::string word) {
+    std::vector<std::string> reflexivePronouns = {"myself", "yourself", "himself", "herself", "itself", "ourselves", "yourselves", "themselves"};
+    return (find(reflexivePronouns.begin(), reflexivePronouns.end(), word) != reflexivePronouns.end());
+}
+
 
 static package
 bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
@@ -3249,9 +3244,22 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     for (int i = 0; i < input_length; i++) {
         char c = input_string[i]; // Current character
         bool is_punct = std::ispunct(c) && c != '"' && c != '-' && c != '&' && c != '-' && c != '<' && c != '>';
+        bool is_space = std::isspace(c);
         if (token.operation != token_op::SPEECH) {
+            if (!token.postfix.empty()) {
+                // if postfix isn't empty there's only one thing we need to do.. 
+                // keep writing to it until we can ditch the token.
+                if (is_space || is_punct) {
+                    token.postfix += c;
+                    continue;
+                }
+                // We're dooooone!
+                token.commit();
+                if (!token.empty()) tokens.push_back(token);
+                token = {};
+            }
             // We explode based on punctuation to help tokenization.
-            if (!is_punct && !token.postfix.empty() && (token.word.empty() || token.word[0] != '.')) {
+            else if (!is_punct && !token.postfix.empty() && (token.word.empty() || token.word[0] != '.')) {
                 // Start a new token.
                 token.commit();
                 if (!token.empty()) tokens.push_back(token);
@@ -3260,7 +3268,6 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         }
         
         // Spaces just get added wherever because you know whatever...
-        bool is_space = std::isspace(c);
         if (is_space && token.empty() && token.word.empty()) {
             token.prefix += c;
             continue;
@@ -3300,17 +3307,13 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                     if (!token.empty()) tokens.push_back(token);
                     tokens.push_back(macro_token);
                     token = {};
-                } else if (isPersonalPronoun(token.word)) {
-                    if (token.word == "I") subject = speaker;
+                } else if (isPronoun(token.word)) {
+                    if (token.word == "I" || token.word == "my" || token.word == "me" || token.word == "myself") subject = speaker;
                     InputToken target_token = {token_op::TARGET, "", subject};
-                    if (is_punct) target_token.postfix += c;
-                    token.cancel();
-                    if (!token.empty()) tokens.push_back(token);
-                    tokens.push_back(target_token);
-                    token = {};
-                } else if (isPossessivePronoun(token.word)) {
-                    if (token.word == "I") subject = speaker;
-                    InputToken target_token = {token_op::POSSESSIVE_TARGET, "", subject};
+                    if (isPossessivePronoun(token.word))
+                        target_token.operation = token_op::POSSESSIVE_TARGET;
+                    else if (isReflexivePronoun(token.word))
+                        target_token.operation = token_op::REFLEXIVE_TARGET;
                     if (is_punct) target_token.postfix += c;
                     token.cancel();
                     if (!token.empty()) tokens.push_back(token);
