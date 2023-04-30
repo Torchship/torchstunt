@@ -3,11 +3,12 @@
 ## Ongoing
 ### *** COMPATIBILITY WARNINGS ***
 - Deleted quota from the codebase
-- Removed distance(), simplex(), reseed_random(), file_version(), clear_ancestor_cache(), owned_objects(), parse_ansi(), strip_ansi(), and relative_heading().
+- Removed distance(), simplex(), reseed_random(), file_version(), clear_ancestor_cache(), owned_objects(), parse_ansi(), strip_ansi(), read_http(), occupants(), and relative_heading().
 
 ### New Features
 - Added waifs() for seeing all open waifs
 - Replaced waif counter with dictionary
+- Added tokenize_input() which takes strings written by players and tokenizes them into contextually aware verbs, macros, targets, and pronouns.
 
 ## 2.7.0 (Mar 5, 2023)
 ### Bug Fixes
