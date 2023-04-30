@@ -3237,7 +3237,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
 {
     int nargs = arglist.v.list[0].v.num;
     Objid speaker = nargs >= 1 ? arglist.v.list[1].v.obj : 0;
-    std::string input_string = nargs >= 2 ? arglist.v.list[2].v.str : "I .wave to KayZach! Then I .say, \"How's it going?!\" I .shrug and .smile at Blue, \"I'm having fun.\" Then I .yawn, and .wave to /everyone.";
+    std::string input_string = nargs >= 2 ? arglist.v.list[2].v.str : "";
 
     std::list<InputToken> tokens;
     int input_length = input_string.length();
@@ -3256,11 +3256,6 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 token.commit();
                 if (!token.empty()) tokens.push_back(token);
                 token = {};
-            // } else if (is_punct && (i + 1 == input_length || !std::isalpha(input_string[i + 1]))) {
-            //     // Postfixes are just punctuation that end a token.
-            //     token.postfix += c;
-            //     subject = speaker;
-            //     continue;
             }
         }
         
@@ -3406,5 +3401,5 @@ register_server(void)
     register_function("listeners", 0, 1, bf_listeners, TYPE_ANY);
     register_function("buffered_output_length", 0, 1,
                       bf_buffered_output_length, TYPE_OBJ);
-    register_function("tokenize_input", 1, 2, bf_tokenize_input, TYPE_OBJ, TYPE_STR);
+    register_function("tokenize_input", 2, 2, bf_tokenize_input, TYPE_OBJ, TYPE_STR);
 }
