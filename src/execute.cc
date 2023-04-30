@@ -3583,46 +3583,6 @@ bf_read(Var arglist, Byte next, void *vdata, Objid progr)
 }
 
 static package
-bf_read_http(Var arglist, Byte next, void *vdata, Objid progr)
-{   /* ("request" | "response" [, object]) */
-    int argc = arglist.v.list[0].v.num;
-    static Objid connection;
-    int request;
-
-    if (!strcasecmp(arglist.v.list[1].v.str, "request"))
-        request = 1;
-    else if (!strcasecmp(arglist.v.list[1].v.str, "response"))
-        request = 0;
-    else {
-        free_var(arglist);
-        return make_error_pack(E_INVARG);
-    }
-
-    if (argc > 1)
-        connection = arglist.v.list[2].v.obj;
-    else
-        connection = activ_stack[0].player;
-
-    free_var(arglist);
-
-    /* Permissions checking */
-    if (argc > 1) {
-        if (!is_wizard(progr)
-                && (!valid(connection)
-                    || progr != db_object_owner(connection)))
-            return make_error_pack(E_PERM);
-    } else {
-        if (!is_wizard(progr)
-                || last_input_task_id(connection) != current_task_id)
-            return make_error_pack(E_PERM);
-    }
-
-    return make_suspend_pack(request ? make_parsing_http_request_task
-                             : make_parsing_http_response_task,
-                             &connection);
-}
-
-static package
 bf_seconds_left(Var arglist, Byte next, void *vdata, Objid progr)
 {
     Var r;
@@ -3745,7 +3705,6 @@ register_execute(void)
     register_function("suspend", 0, 1, bf_suspend, TYPE_NUMERIC);
     register_function("yin", 0, 3, bf_yield_if_needed, TYPE_NUMERIC, TYPE_INT, TYPE_INT);
     register_function("read", 0, 2, bf_read, TYPE_OBJ, TYPE_ANY);
-    register_function("read_http", 1, 2, bf_read_http, TYPE_STR, TYPE_OBJ);
 
     register_function("seconds_left", 0, 0, bf_seconds_left);
     register_function("ticks_left", 0, 0, bf_ticks_left);
