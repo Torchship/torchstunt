@@ -3248,7 +3248,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     bool new_word = false;
     for (int i = 0; i < input_length; i++) {
         char c = input_string[i]; // Current character
-        bool is_punct = std::ispunct(c) && c != '"' && c != '-' && c != '&' && c != '-';
+        bool is_punct = std::ispunct(c) && c != '"' && c != '-' && c != '&' && c != '-' && c != '<' && c != '>';
         if (token.operation != token_op::SPEECH) {
             // We explode based on punctuation to help tokenization.
             if (!is_punct && !token.postfix.empty() && (token.word.empty() || token.word[0] != '.')) {
@@ -3271,9 +3271,10 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             }
             // We do some additional checking here to see if we need to do some .. ENHANCED PROCESSING.
             if (token.operation != token_op::SPEECH) {
-                if (token.word[0] == '.') {
+                if (token.word[0] == '.' || (token.word[0] == '%' && token.word.back() == '>')) {
                     // This is an action.
-                    InputToken verb_token = {token_op::VERB, token.word.substr(1, token.word.length() - 1)};
+                    std::string substring = token.word[0] == '%' && token.word.back() == '>' ? token.word.substr(2, token.word.length() - 3) : token.word.substr(1, token.word.length() - 1);
+                    InputToken verb_token = {token_op::VERB, substring};
                     if (is_punct) verb_token.postfix += c;
                     token.cancel();
                     if (!token.empty()) tokens.push_back(token);
