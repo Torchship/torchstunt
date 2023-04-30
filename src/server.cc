@@ -3294,7 +3294,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                     match = NOTHING;
                 } else if (token.word == "/all" || token.word == "/everyone" || token.word == "/everybody") {
                     // This is probably a macro.
-                    InputToken macro_token = {token_op::MACRO, token.word};
+                    InputToken macro_token = {token_op::MACRO, token.word.substr(1, token.word.length() - 1)};
                     if (is_punct) macro_token.postfix += c;
                     token.cancel();
                     if (!token.empty()) tokens.push_back(token);
