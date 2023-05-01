@@ -3199,31 +3199,19 @@ struct InputToken {
     }
 };
 
-static bool isSelfPronoun(std::string word) {
-    // Convert word to lowercase
-    transform(word.begin(), word.end(), word.begin(), ::tolower);
-
-    // Check if word is "i", "me", or "my"
-    if (word == "i" || word == "me" || word == "my") {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-static bool isPronoun(std::string word) {
-    std::vector<std::string> pronouns = {"I", "me", "my", "you", "he", "she", "it", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", "who", "whom", "whose", "what", "which", "whoever", "whomever"};
-    return (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
-}
-
-bool isPossessivePronoun(std::string word) {
+static bool isPossessivePronoun(std::string word) {
     std::vector<std::string> possessivePronouns = {"my", "your", "his", "her", "its", "our", "their", "whose"};
     return (find(possessivePronouns.begin(), possessivePronouns.end(), word) != possessivePronouns.end());
 }
 
-bool isReflexivePronoun(std::string word) {
+static bool isReflexivePronoun(std::string word) {
     std::vector<std::string> reflexivePronouns = {"myself", "yourself", "himself", "herself", "itself", "ourselves", "yourselves", "themselves"};
     return (find(reflexivePronouns.begin(), reflexivePronouns.end(), word) != reflexivePronouns.end());
+}
+
+static bool isPronoun(std::string word) {
+    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", "who", "whom", "whose", "what", "which", "whoever", "whomever"};
+    return isPossessivePronoun(word) || isReflexivePronoun(word) || (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
 }
 
 
@@ -3287,7 +3275,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                     if (!token.empty()) tokens.push_back(token);
                     tokens.push_back(verb_token);
                     token = {};
-                } else if (std::isupper(token.word[0]) && valid(match = match_object(speaker, token.word.c_str()))) {
+                } else if (std::isupper(token.word[0]) && valid(match = match_object(speaker, token.word.c_str())) && is_user(match)) {
                     // If we match this we found something in the local area that matches.
                     subject = match;
                     InputToken target_token = {c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET, "", subject};
