@@ -3275,7 +3275,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                     if (!token.empty()) tokens.push_back(token);
                     tokens.push_back(verb_token);
                     token = {};
-                } else if (std::isupper(token.word[0]) && valid(match = match_object(speaker, token.word.c_str())) && is_user(match)) {
+                } else if (std::isupper(token.word[0]) && token.word.length() > 3 && valid(match = match_object(speaker, token.word.c_str())) && is_user(match)) {
                     // If we match this we found something in the local area that matches.
                     subject = match;
                     InputToken target_token = {c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET, "", subject};
