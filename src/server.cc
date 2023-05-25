@@ -3174,28 +3174,26 @@ const char* enum_to_c_str(token_op op) {
     }
 }
 
+#define COMMIT_AND_ADD(tokens, token) \
+do { \
+    if (!token.totally_empty()) tokens.push_back(token);  \
+    token = {}; \
+} while (0)
+
 struct InputToken {
     token_op operation = token_op::TEXT; // Current token operation.
     std::string content; // The content we've assembled so far...
     Objid target = NOTHING;
     std::string postfix; // This is typically punctuation appended to the end of content
     std::string prefix; 
-    std::string word; // This is the word we're currently building. This may include punctuation.
     
-    void commit() {
-        if (this->word.empty())
-          return;
-        this->content += this->word;
-        this->word = "";
-    }
-
-    void cancel() {
-        this->word = "";
-        this->postfix = "";
-    }
-
     bool empty() {
         return this->content.empty();
+    }
+
+    // Called if there's really no content at all.
+    bool totally_empty() {
+        return this->empty() && this->postfix.empty() && this->prefix.empty();
     }
 };
 
@@ -3210,10 +3208,9 @@ static bool isReflexivePronoun(std::string word) {
 }
 
 static bool isPronoun(std::string word) {
-    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "themselves"};
+    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "themselves"};
     return isPossessivePronoun(word) || isReflexivePronoun(word) || (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
 }
-
 
 static package
 bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
@@ -3225,118 +3222,136 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     std::list<InputToken> tokens;
     int input_length = input_string.length();
 
-    InputToken token;
+    InputToken token; // our current token    
     Objid subject = speaker;
     Objid match = NOTHING;
-    bool new_word = false;
     for (int i = 0; i < input_length; i++) {
         char c = input_string[i]; // Current character
-        bool is_punct = std::ispunct(c) && c != '"' && c != '-' && c != '&' && c != '-' && c != '<' && c != '>';
-        bool is_space = std::isspace(c);
-        if (token.operation != token_op::SPEECH) {
-            if (!token.postfix.empty()) {
-                // if postfix isn't empty there's only one thing we need to do.. 
-                // keep writing to it until we can ditch the token.
-                if (is_space || is_punct) {
-                    token.postfix += c;
-                    continue;
-                }
-                // We're dooooone!
-                token.commit();
-                if (!token.empty()) tokens.push_back(token);
-                token = {};
-            }
-            // We explode based on punctuation to help tokenization.
-            else if (!is_punct && !token.postfix.empty() && (token.word.empty() || token.word[0] != '.')) {
-                // Start a new token.
-                token.commit();
-                if (!token.empty()) tokens.push_back(token);
-                token = {};
-            }
-        }
-        
-        // Spaces just get added wherever because you know whatever...
-        if (is_space && token.empty() && token.word.empty()) {
-            token.prefix += c;
-            continue;
-        } else if ((is_space || is_punct) && !token.word.empty()) {
-            if (!token.postfix.empty() && is_punct) {
-                token.postfix += c;
+        // Top level is our MODE
+        if (token.operation == token_op::SPEECH) {
+            // Speech mode is fairly closed loop and simple. We're just
+            // gobbling up all speech until we reach our end character.
+            if (c == '"') {
+                // At " we end the speech and move on.
+                COMMIT_AND_ADD(tokens, token);
                 continue;
             }
-            // We do some additional checking here to see if we need to do some .. ENHANCED PROCESSING.
-            if (token.operation != token_op::SPEECH) {
-                if (token.word[0] == '.' || (token.word[0] == '%' && token.word.back() == '>')) {
-                    // This is an action.
-                    std::string substring = token.word[0] == '%' && token.word.back() == '>' ? token.word.substr(2, token.word.length() - 3) : token.word.substr(1, token.word.length() - 1);
-                    InputToken verb_token = {token_op::VERB, substring};
-                    if (is_punct) verb_token.postfix += c;
-                    token.cancel();
-                    if (!token.empty()) tokens.push_back(token);
-                    tokens.push_back(verb_token);
-                    token = {};
-                } else if (std::isupper(token.word[0]) && token.word.length() > 3 && valid(match = match_object(speaker, token.word.c_str())) && is_user(match)) {
-                    // If we match this we found something in the local area that matches.
-                    subject = match;
-                    InputToken target_token = {c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET, token.word, subject};
-                    if (target_token.operation == token_op::POSSESSIVE_TARGET) {
-                        i++; // We skip ahead one here because 's is posessive and we're on '.
-                    } else if (is_punct) {
-                        target_token.postfix += c;
-                    }
-                    token.cancel();
-                    if (!token.empty()) tokens.push_back(token);
-                    tokens.push_back(target_token);
-                    token = {};
-                    match = NOTHING;
-                } else if (token.word == "/all" || token.word == "/everyone" || token.word == "/everybody") {
-                    // This is probably a macro.
-                    InputToken macro_token = {token_op::MACRO, token.word.substr(1, token.word.length() - 1)};
-                    if (is_punct) macro_token.postfix += c;
-                    token.cancel();
-                    if (!token.empty()) tokens.push_back(token);
-                    tokens.push_back(macro_token);
-                    token = {};
-                } else if (isPronoun(token.word)) {
-                    if (token.word == "I" || token.word == "my" || token.word == "me" || token.word == "myself") subject = speaker;
-                    InputToken target_token = {token_op::TARGET, token.word, subject};
-                    if (isPossessivePronoun(token.word))
-                        target_token.operation = token_op::POSSESSIVE_TARGET;
-                    else if (isReflexivePronoun(token.word))
-                        target_token.operation = token_op::REFLEXIVE_TARGET;
-                    if (is_punct) target_token.postfix += c;
-                    token.cancel();
-                    if (!token.empty()) tokens.push_back(token);
-                    tokens.push_back(target_token);
-                    token = {};
-                } else if (is_punct) {
-                    token.postfix += c;
-                }
-            }
-
-            if (is_punct && token.operation != token_op::SPEECH)
-              continue;
-            token.word += c;
-            token.commit();
+            // Gobble
+            token.content += c;
             continue;
         }
-
+        // This is probably TEXT mode. It's the meat of the parser.
+        // Very first we check if we're entering speech mode as it's tbh the easiest
         if (c == '"') {
-            // We're entering or existing speech
-            token.commit();
-            tokens.push_back(token);
-            token = {token.operation == token_op::SPEECH ? token_op::TEXT : token_op::SPEECH};
+          if (!token.totally_empty()) COMMIT_AND_ADD(tokens, token); // Reboot token if we we're on a word
+          token = {token_op::SPEECH};
+          continue;
+        }
+        bool is_punct = std::ispunct(c) && c != '-' && c != '&' && c != '-';
+        bool is_space = std::isspace(c);
+        // EXPLANATION:
+        // How token splitting works is that a token is composed of several truths:
+        // CONTENT will never have punctuation only spaces and words
+        // TOKENS are split by operation and punctuation
+        // PREFIX AND POSTFIX contain punctuation elements or spaces
+        //
+        // EXAMPLE: .look => prefix '.', word 'look'
+        // EXAMPLE: Foo, => word 'Foo', postfix ','
+        if (!is_space && !is_punct) {
+            // In TEXT mode any alphanumeric character just gets added to content.
+            token.content += c;
             continue;
         }
 
-        // Normal operation we're just adding more characters to the new token.
-        token.word += c;
+        // ATTENTION: We need to add punctuation to prefix/postfix BEFORE processing
+        // Because that's how some of the special functions match!!!
+        if (is_punct) {
+            if (token.empty()) {
+                token.prefix += c;
+                continue;
+            }
+            else 
+                token.postfix += c;
+        }
+
+        if (token.content.empty()) {
+            // Optimization guard check
+            token.prefix += c;
+            continue;
+        }
+
+        // At this point our token might look like...
+        // prefix '.', word 'look'[, postfix ',']
+        // prefix '%<', word 'look', postfix '>'
+        // word 'Foo'[, postfix ',']
+        if (!token.prefix.empty() && token.prefix.back() == '.')
+        {
+            token.operation = token_op::VERB;
+            token.prefix.pop_back();
+        } else if (token.prefix == "%<" && token.postfix == ">") {
+            token.operation = token_op::VERB;
+            token.prefix.clear();
+            token.postfix.clear();
+        } else if (std::isupper(token.content[0]) && token.content.length() > 3 && valid(match = match_object(speaker, token.content.c_str())) && is_user(match)) {
+            // If we match this we found something in the local area that matches.
+            subject = match;
+            token.operation = c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET;
+            token.target = subject;
+        } else if (!token.prefix.empty() && token.prefix.back() == '/') {
+            // This is probably a macro.
+            token.operation = token_op::MACRO;
+            token.prefix.pop_back();
+        } else if (isPronoun(token.content)) {
+            // token = token.commit_and_clone(tokens);
+            if (token.content == "I" || token.content == "my" || token.content == "me" || token.content == "myself") subject = speaker;
+            token.operation = token_op::TARGET;
+            token.target = subject;
+            if (isPossessivePronoun(token.content))
+                token.operation = token_op::POSSESSIVE_TARGET;
+            else if (isReflexivePronoun(token.content))
+                token.operation = token_op::REFLEXIVE_TARGET;
+        }
+
+        // Finally if we're at a space character or a non-text operation we separate
+        // into a new token.
+        // This is done mostly for convenience as it lets us nom word by word and is readable.
+        if (is_space) {
+            token.postfix += c;
+            COMMIT_AND_ADD(tokens, token);
+        } else if (token.operation != token_op::TEXT) {
+            COMMIT_AND_ADD(tokens, token);
+        }
     }
 
-    if (!token.empty() || !token.word.empty()) {
-        // end of the buffer
-        token.commit();
-        tokens.push_back(token);
+    if (!token.totally_empty()) COMMIT_AND_ADD(tokens, token);
+
+    // This is an optimization pass.
+    // Essentially every text token can fall into the previous text token
+    // This massively cuts down on memory usage.
+    for(auto it = std::next(tokens.begin()); it != tokens.end(); /* no increment here */) {
+        auto& curr_token = *it;
+        auto& prev_token = *std::prev(it);
+        if (curr_token.operation == token_op::TEXT && curr_token.empty()) {
+            prev_token.postfix += curr_token.prefix;
+            prev_token.postfix += curr_token.postfix;
+            it = tokens.erase(it);  // erase and move to the next token
+        }
+        else if(prev_token.operation == token_op::TEXT && curr_token.operation == token_op::TEXT) {
+            bool prev_postfix_empty_or_whitespace = prev_token.postfix.empty() || std::all_of(prev_token.postfix.begin(), prev_token.postfix.end(), ::isspace);
+            bool curr_prefix_empty_or_whitespace = curr_token.prefix.empty() || std::all_of(curr_token.prefix.begin(), curr_token.prefix.end(), ::isspace);
+
+            if(prev_postfix_empty_or_whitespace && curr_prefix_empty_or_whitespace) {
+                prev_token.content += prev_token.postfix;
+                prev_token.content += curr_token.prefix;
+                prev_token.content += curr_token.content;
+                prev_token.postfix = curr_token.postfix;
+                it = tokens.erase(it);  // erase and move to the next token
+            } else {
+                ++it;  // just move to the next token
+            }
+        } else {
+            ++it;  // just move to the next token
+        }
     }
 
     // Here's where we disassemble this weird datastructure I've made into vars.
