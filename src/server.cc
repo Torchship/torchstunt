@@ -3200,17 +3200,17 @@ struct InputToken {
 };
 
 static bool isPossessivePronoun(std::string word) {
-    std::vector<std::string> possessivePronouns = {"my", "your", "his", "her", "its", "our", "their", "whose"};
+    std::vector<std::string> possessivePronouns = {"my", "your", "his", "her", "their", "whose"};
     return (find(possessivePronouns.begin(), possessivePronouns.end(), word) != possessivePronouns.end());
 }
 
 static bool isReflexivePronoun(std::string word) {
-    std::vector<std::string> reflexivePronouns = {"myself", "yourself", "himself", "herself", "itself", "ourselves", "yourselves", "themselves"};
+    std::vector<std::string> reflexivePronouns = {"myself", "yourself", "himself", "herself", "yourselves", "themselves"};
     return (find(reflexivePronouns.begin(), reflexivePronouns.end(), word) != reflexivePronouns.end());
 }
 
 static bool isPronoun(std::string word) {
-    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", "who", "whom", "whose", "what", "which", "whoever", "whomever"};
+    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "we", "us", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "themselves"};
     return isPossessivePronoun(word) || isReflexivePronoun(word) || (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
 }
 
@@ -3278,9 +3278,11 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 } else if (std::isupper(token.word[0]) && token.word.length() > 3 && valid(match = match_object(speaker, token.word.c_str())) && is_user(match)) {
                     // If we match this we found something in the local area that matches.
                     subject = match;
-                    InputToken target_token = {c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET, "", subject};
+                    InputToken target_token = {c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET, token.word, subject};
                     if (target_token.operation == token_op::POSSESSIVE_TARGET) {
                         i++; // We skip ahead one here because 's is posessive and we're on '.
+                    } else if (is_punct) {
+                        target_token.postfix += c;
                     }
                     token.cancel();
                     if (!token.empty()) tokens.push_back(token);
@@ -3297,7 +3299,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                     token = {};
                 } else if (isPronoun(token.word)) {
                     if (token.word == "I" || token.word == "my" || token.word == "me" || token.word == "myself") subject = speaker;
-                    InputToken target_token = {token_op::TARGET, "", subject};
+                    InputToken target_token = {token_op::TARGET, token.word, subject};
                     if (isPossessivePronoun(token.word))
                         target_token.operation = token_op::POSSESSIVE_TARGET;
                     else if (isReflexivePronoun(token.word))
