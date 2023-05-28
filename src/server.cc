@@ -3316,10 +3316,15 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         } else if (token.prefix == "%") {
             token.operation = token_op::SUBSTITUTION;
             token.prefix.clear();
-        } else if (std::isupper(token.content[0]) && token.content.length() > 3 && valid(match = match_object(speaker, token.content.c_str())) && is_user(match)) {
+        } else if (std::isupper(token.content[0]) && token.content.length() > 3 && valid(match = match_object(speaker, token.content.c_str()))) {
             // If we match this we found something in the local area that matches.
             subject = match;
-            token.operation = c == '\'' ? token_op::POSSESSIVE_TARGET : token_op::TARGET;
+            token.operation = token_op::TARGET;
+            if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
+              token.operation = token_op::POSSESSIVE_TARGET;
+              token.postfix.pop_back(); // This clear's the possessive from the buffer.
+              ++i; // This will clear the oncoming s.
+            }
             token.target = subject;
         } else if (!token.prefix.empty() && token.prefix.back() == '/') {
             // This is probably a macro.
