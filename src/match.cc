@@ -117,7 +117,7 @@ match_object(Objid player, const char *name)
 {
     if (name[0] == '\0')
         return NOTHING;
-    if (name[0] == '#') {
+    if (name[0] == '#' && is_wizard(player)) {
         char *p;
         Objid r = strtol(name + 1, &p, 10);
 
