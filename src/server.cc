@@ -3150,7 +3150,8 @@ enum class token_op {
     POSSESSIVE_TARGET,
     REFLEXIVE_TARGET,
     MACRO,
-    SPEECH
+    SPEECH,
+    SUBSTITUTION
 };
 
 const char* enum_to_c_str(token_op op) {
@@ -3169,6 +3170,8 @@ const char* enum_to_c_str(token_op op) {
             return "MACRO";
         case token_op::SPEECH:
             return "SPEECH";
+        case token_op::SUBSTITUTION:
+            return "SUB";
         default:
             return "";
     }
@@ -3212,6 +3215,19 @@ static bool isPronoun(std::string word) {
     return isPossessivePronoun(word) || isReflexivePronoun(word) || (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
 }
 
+static bool isGrammaticalPunctuation(char c) {
+    std::string punctuationMarks = ".?!,;:'./–&$%@";
+    
+    // Loop through each character in the punctuationMarks string
+    for (char punctuation : punctuationMarks) {
+        if (c == punctuation) {
+            return true; // Character is a punctuation mark
+        }
+    }
+    
+    return false; // Character is not a punctuation mark
+}
+
 static package
 bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
 {
@@ -3223,7 +3239,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     int input_length = input_string.length();
 
     InputToken token; // our current token    
-    Objid subject = speaker;
+    Objid subject = NOTHING;
     Objid match = NOTHING;
     for (int i = 0; i < input_length; i++) {
         char c = input_string[i]; // Current character
@@ -3271,10 +3287,15 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 continue;
             }
             else 
+            {
                 token.postfix += c;
+                // Subject reset
+                if (c == '.')
+                    subject = NOTHING;
+            }
         }
 
-        if (token.content.empty()) {
+        if (token.empty()) {
             // Optimization guard check
             token.prefix += c;
             continue;
@@ -3292,6 +3313,9 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             token.operation = token_op::VERB;
             token.prefix.clear();
             token.postfix.clear();
+        } else if (token.prefix == "%") {
+            token.operation = token_op::SUBSTITUTION;
+            token.prefix.clear();
         } else if (std::isupper(token.content[0]) && token.content.length() > 3 && valid(match = match_object(speaker, token.content.c_str())) && is_user(match)) {
             // If we match this we found something in the local area that matches.
             subject = match;
@@ -3319,6 +3343,8 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             token.postfix += c;
             COMMIT_AND_ADD(tokens, token);
         } else if (token.operation != token_op::TEXT) {
+            COMMIT_AND_ADD(tokens, token);
+        } else if (!token.postfix.empty() && std::ispunct(token.postfix.back())) {
             COMMIT_AND_ADD(tokens, token);
         }
     }
