@@ -189,7 +189,7 @@ parse_ordinal(std::string word) {
         // Brute force ordinal matching
         int ordinalIndex = findOrdinalIndex(token, ordinals);
         if (ordinalIndex != -1) {
-            ordinalTokens.push_back(ordinalIndex);
+            ordinalTokens.push_back(ordinalIndex + 1);
             continue;
         }
         
@@ -215,6 +215,8 @@ parse_ordinal(std::string word) {
     return FAILED_MATCH;
 }
 
+#include "log.h"
+
 int
 complex_match(std::string subject, std::vector<std::vector<std::string>> targets) {
     std::vector<std::string> subjectWords;
@@ -231,28 +233,37 @@ complex_match(std::string subject, std::vector<std::vector<std::string>> targets
     else {
         subjectWords.erase(subjectWords.begin());
         if (subjectWords.size() <= 0) return FAILED_MATCH;
+        subject = boost::algorithm::join(subjectWords, " ");
     }
     
     std::vector<int> exactMatches, startMatches, containMatches;
     
     for(int i = 0; i < targets.size(); i++) {
         std::string lowerSubject = boost::algorithm::to_lower_copy(subject);
-        for (const auto &alias : targets[i]) {
-            std::string lowerTarget = boost::algorithm::to_lower_copy(alias);
+        for (const std::string& alias : targets[i]) {
+            std::string lowerAlias = boost::algorithm::to_lower_copy(alias);
             
-            if(lowerSubject == lowerTarget) {
-                if (ordinal <= 1) return i;
+            bool found_match = false;
+            if(lowerSubject == lowerAlias) {
+                oklog("found exact match");
+                if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
+                    return i;
+                }
                 exactMatches.push_back(i);
-                break;
+                found_match = true;
             } 
-            else if(boost::algorithm::starts_with(lowerTarget, lowerSubject)) {
+            
+            if(boost::algorithm::starts_with(lowerAlias, lowerSubject)) {
                 startMatches.push_back(i);
-                break;
+                found_match = true;
             }
-            else if(boost::algorithm::contains(lowerTarget, lowerSubject)) {
+            
+            if(boost::algorithm::contains(lowerAlias, lowerSubject)) {
                 containMatches.push_back(i);
-                break;
+                found_match = true;
             }
+
+            if (found_match) break;
         }
     }
     
@@ -263,6 +274,7 @@ complex_match(std::string subject, std::vector<std::vector<std::string>> targets
         return FAILED_MATCH;
     }
 
+    if(exactMatches.size() > 0) return AMBIGUOUS;
     if(startMatches.size() > 0) return AMBIGUOUS;
     if(containMatches.size() > 0) return AMBIGUOUS;
     return FAILED_MATCH;

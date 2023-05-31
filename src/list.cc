@@ -1367,12 +1367,12 @@ bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
                     }
                     break;
                 case TYPE_LIST:
-                    for (int x = 1; x <= arglist.v.list[2].v.list[0].v.num; x++) {
-                        if (arglist.v.list[2].v.list[x].type != TYPE_STR) {
+                    for (int x = 1; x <= arglist.v.list[2].v.list[i].v.list[0].v.num; x++) {
+                        if (arglist.v.list[2].v.list[i].v.list[x].type != TYPE_STR) {
                             free_var(arglist);
                             return make_error_pack(E_INVARG);
                         }
-                        key_index.push_back(std::string(arglist.v.list[2].v.list[x].v.str));
+                        key_index.push_back(std::string(arglist.v.list[2].v.list[i].v.list[x].v.str));
                     }
                     break;
                 default:
@@ -2013,6 +2013,7 @@ register_list(void)
     register_function("match", 2, 3, bf_match, TYPE_STR, TYPE_STR, TYPE_ANY);
     register_function("rmatch", 2, 3, bf_rmatch, TYPE_STR, TYPE_STR, TYPE_ANY);
     register_function("substitute", 2, 2, bf_substitute, TYPE_STR, TYPE_LIST);
+    register_function("complex_match", 2, 3, bf_complex_match, TYPE_STR, TYPE_LIST, TYPE_LIST);
     register_function("index", 2, 4, bf_index,
                       TYPE_STR, TYPE_STR, TYPE_ANY, TYPE_INT);
     register_function("rindex", 2, 4, bf_rindex,
