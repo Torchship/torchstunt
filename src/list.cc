@@ -35,6 +35,7 @@
 #include "list.h"
 #include "log.h"
 #include "map.h"
+#include "match.h"
 #include "options.h"
 #include "pattern.h"
 #include "streams.h"
@@ -1301,6 +1302,99 @@ bf_pluralize(Var arglist, Byte next, void *vdata, Objid progr)
 
     // No matches found the word is already correct.
     r.v.str = str_dup(arglist.v.list[1].v.str);
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+static package
+bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
+{   /* (subject, targets [, keys]) */
+    std::vector<std::vector<std::string>> keys;
+
+    if (arglist.v.list[0].v.num == 3) {
+        // There must be as many keys as there are targets.
+        if (arglist.v.list[3].v.list[0].v.num != arglist.v.list[2].v.list[0].v.num) {
+            free_var(arglist);
+            return make_error_pack(E_INVARG);
+        }
+        // Compile our keys...
+        for (int i = 1; i <= arglist.v.list[3].v.list[0].v.num; i++) {
+            std::vector<std::string> key_index;
+            switch(arglist.v.list[3].v.list[i].type) {
+                case TYPE_STR:
+                    key_index.push_back(std::string(arglist.v.list[3].v.list[i].v.str));
+                    break;
+                case TYPE_LIST:
+                    // Someone in the future look at this and go 'what the fuck is actually happening here'
+                    // ..possibly me..
+                    // TL;DR we support lists of lists to alias one key result to multiple strings
+                    // meaning one index target can have multiple strings that will match to it
+                    // this lets things like .aliases work.
+                    for (int x = 1; x <= arglist.v.list[3].v.list[i].v.list[0].v.num; x++) {
+                        if (arglist.v.list[3].v.list[i].v.list[x].type != TYPE_STR) {
+                            free_var(arglist);
+                            return make_error_pack(E_INVARG);
+                        }
+                        key_index.push_back(std::string(arglist.v.list[3].v.list[i].v.list[x].v.str));
+                    }
+                    break;
+                default:
+                    free_var(arglist);
+                    return make_error_pack(E_INVARG);
+            }
+            keys.push_back(key_index);            
+        }
+    } else {
+        // We have to calculate what the likely keys are based on the targets.
+        Var *names;
+        for (int i = 1; i <= arglist.v.list[2].v.list[0].v.num; i++) {
+            // If it's an object we'll use their aliases
+            // if it's a string we can assume it's the string itself.
+            std::vector<std::string> key_index;
+            switch (arglist.v.list[2].v.list[i].type) {
+                case TYPE_STR:
+                    key_index.push_back(std::string(arglist.v.list[2].v.list[i].v.str));
+                    break;
+                case TYPE_OBJ:
+                    names = aliases(arglist.v.list[2].v.list[i].v.obj);
+                    for (i = 0; i <= names[0].v.num; i++) {
+                        if (i == 0)
+                            key_index.push_back(db_object_name(arglist.v.list[2].v.list[i].v.obj));
+                        else if (names[i].type != TYPE_STR)
+                            continue;
+                        else
+                            key_index.push_back(std::string(names[i].v.str));
+                    }
+                    break;
+                case TYPE_LIST:
+                    for (int x = 1; x <= arglist.v.list[2].v.list[0].v.num; x++) {
+                        if (arglist.v.list[2].v.list[x].type != TYPE_STR) {
+                            free_var(arglist);
+                            return make_error_pack(E_INVARG);
+                        }
+                        key_index.push_back(std::string(arglist.v.list[2].v.list[x].v.str));
+                    }
+                    break;
+                default:
+                    free_var(arglist);
+                    return make_error_pack(E_INVARG);
+            }
+            keys.push_back(key_index);
+        }
+    }
+
+    // Now that we have our keys parsed out, the only thing left to do is run a match.
+    int index = complex_match(std::string(arglist.v.list[1].v.str), keys);
+    if (index == FAILED_MATCH || index == AMBIGUOUS) {
+        free_var(arglist);
+        Var r;
+        r.type = TYPE_OBJ;
+        r.v.obj = index;
+        return make_var_pack(r);
+    }
+
+    
+    Var r = var_dup(arglist.v.list[2].v.list[index + 1]);
     free_var(arglist);
     return make_var_pack(r);
 }

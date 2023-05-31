@@ -17,6 +17,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
+#include <regex>
+#include <boost/algorithm/string.hpp>
 
 #include "config.h"
 #include "db.h"
@@ -27,7 +30,7 @@
 #include "unparse.h"
 #include "utils.h"
 
-static Var *
+Var *
 aliases(Objid oid)
 {
     Var value;
@@ -132,4 +135,135 @@ match_object(Objid player, const char *name)
     if (!strcasecmp(name, "here"))
         return db_object_location(player);
     return match_contents(player, name);
+}
+
+int findOrdinalIndex(const std::string& str, const std::vector<std::vector<std::string>>& ordinals) {
+    for (size_t i = 0; i < ordinals.size(); ++i) {
+        for (const auto& ordinal : ordinals[i]) {
+            if (boost::algorithm::iequals(str, ordinal)) {
+                return i;
+            }
+        }
+    }
+    return -1;  // Return -1 if no match is found
+}
+
+int
+parse_ordinal(std::string word) {
+    const std::regex e ("(\\d+)(th|st|nd|rd)");
+    const std::vector<std::vector<std::string>> ordinals = {
+        {"first"},
+        {"second", "twenty", "twentieth"},
+        {"third", "thirty", "thirtieth"},
+        {"fourth", "fourtieth", "fourty"},
+        {"fifth", "fiftieth", "fifty"},
+        {"sixth", "sixtieth", "sixty"},
+        {"seventh", "seventieth", "seventy"},
+        {"eighth", "eightieth", "eighty"},
+        {"ninth", "ninetieth", "ninty"},
+        {"tenth"},
+        {"eleventh"},
+        {"twelth"},
+        {"thirteenth"},
+        {"fourteenth"},
+        {"fifteenth"},
+        {"sixteenth"},
+        {"seventeeth"},
+        {"eighteenth"},
+        {"nineteenth"}
+    };
+    std::vector<std::string> tokens;
+    boost::split(tokens, boost::algorithm::to_lower_copy(word), boost::is_any_of("-"));
+    if (tokens.size() > 2) return FAILED_MATCH; // Error, no idea what this is.
+    std::vector<int> ordinalTokens;
+    for (const std::string &token : tokens) {
+        // Easiest matching: 1. 2. etc.
+        if (token.back() == '.') {
+            try {
+                ordinalTokens.push_back(std::stoi(token.substr(0, token.size() - 1)));
+            } catch (...) {
+                return FAILED_MATCH;
+            }
+        }
+
+        // Brute force ordinal matching
+        int ordinalIndex = findOrdinalIndex(token, ordinals);
+        if (ordinalIndex != -1) {
+            ordinalTokens.push_back(ordinalIndex);
+            continue;
+        }
+        
+        // Third order matching, try matching 1st, etc.
+        std::smatch sm;
+        if (std::regex_search(token, sm, e) && sm.size() > 1) {
+            try {
+                ordinalTokens.push_back(std::stoi(sm.str(1)));
+            } catch (...) {
+                return FAILED_MATCH;
+            }
+        }
+    }
+
+    int ordinal;
+    if (ordinalTokens.size() == 1)
+        return ordinalTokens[0];
+    else if (ordinalTokens.size() == 2) {
+        ordinal = ordinalTokens[0] * 10;
+        ordinal = ordinal + ordinalTokens[1];
+        return ordinal;
+    }
+    return FAILED_MATCH;
+}
+
+int
+complex_match(std::string subject, std::vector<std::vector<std::string>> targets) {
+    std::vector<std::string> subjectWords;
+    boost::split(subjectWords, subject, boost::is_any_of(" "));
+    
+    // Guard check for no subject
+    if (subjectWords.size() <= 0) return FAILED_MATCH;
+    // Guard check for no targets
+    if (targets.size() <= 0) return FAILED_MATCH;
+
+    // Ordinal matches 
+    int ordinal = parse_ordinal(subjectWords[0]);
+    if (ordinal <= 0) ordinal = 0; // Safety in case ordinal didn't match
+    else {
+        subjectWords.erase(subjectWords.begin());
+        if (subjectWords.size() <= 0) return FAILED_MATCH;
+    }
+    
+    std::vector<int> exactMatches, startMatches, containMatches;
+    
+    for(int i = 0; i < targets.size(); i++) {
+        std::string lowerSubject = boost::algorithm::to_lower_copy(subject);
+        for (const auto &alias : targets[i]) {
+            std::string lowerTarget = boost::algorithm::to_lower_copy(alias);
+            
+            if(lowerSubject == lowerTarget) {
+                if (ordinal <= 1) return i;
+                exactMatches.push_back(i);
+                break;
+            } 
+            else if(boost::algorithm::starts_with(lowerTarget, lowerSubject)) {
+                startMatches.push_back(i);
+                break;
+            }
+            else if(boost::algorithm::contains(lowerTarget, lowerSubject)) {
+                containMatches.push_back(i);
+                break;
+            }
+        }
+    }
+    
+    if (ordinal > 0) {
+        if(ordinal <= exactMatches.size()) return exactMatches[ordinal - 1];
+        if(ordinal <= startMatches.size()) return startMatches[ordinal - 1];
+        if(ordinal <= containMatches.size()) return containMatches[ordinal - 1];
+        return FAILED_MATCH;
+    }
+
+    if(startMatches.size() > 0) return AMBIGUOUS;
+    if(containMatches.size() > 0) return AMBIGUOUS;
+    return FAILED_MATCH;
 }

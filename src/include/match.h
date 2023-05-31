@@ -17,5 +17,8 @@
 
 #include "config.h"
 #include "structures.h"
+#include <vector>
 
 extern Objid match_object(Objid player, const char *name);
+extern Var * aliases(Objid oid);
+extern int complex_match(std::string subject, std::vector<std::vector<std::string>> targets);
