@@ -1,5 +1,5 @@
 FROM debian:buster-slim as builder
-RUN apt update && apt install -y libpq-dev libpq5 wget bison gperf libsqlite3-dev libexpat1-dev git libaspell-dev cmake libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev 
+RUN apt update && apt install -y libboost-all-dev libpq-dev libpq5 wget bison gperf libsqlite3-dev libexpat1-dev git libaspell-dev cmake libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev 
 
 # Need to upgrade to a better CMAKE version, as we're super cool bleeding edge neato.
 WORKDIR /opt
