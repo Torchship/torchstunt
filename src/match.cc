@@ -173,7 +173,8 @@ parse_ordinal(std::string word) {
         {"nineteenth"}
     };
     std::vector<std::string> tokens;
-    boost::split(tokens, boost::algorithm::to_lower_copy(word), boost::is_any_of("-"));
+    word = boost::algorithm::to_lower_copy(word);
+    boost::split(tokens, word, boost::is_any_of("-"));
     if (tokens.size() > 2) return FAILED_MATCH; // Error, no idea what this is.
     std::vector<int> ordinalTokens;
     for (const std::string &token : tokens) {
@@ -217,22 +218,22 @@ parse_ordinal(std::string word) {
 
 #include "log.h"
 
-int
+std::vector<int>
 complex_match(std::string subject, std::vector<std::vector<std::string>> targets) {
     std::vector<std::string> subjectWords;
     boost::split(subjectWords, subject, boost::is_any_of(" "));
     
     // Guard check for no subject
-    if (subjectWords.size() <= 0) return FAILED_MATCH;
+    if (subjectWords.size() <= 0) return {};
     // Guard check for no targets
-    if (targets.size() <= 0) return FAILED_MATCH;
+    if (targets.size() <= 0) return {};
 
     // Ordinal matches 
     int ordinal = parse_ordinal(subjectWords[0]);
     if (ordinal <= 0) ordinal = 0; // Safety in case ordinal didn't match
     else {
         subjectWords.erase(subjectWords.begin());
-        if (subjectWords.size() <= 0) return FAILED_MATCH;
+        if (subjectWords.size() <= 0) return {};
         subject = boost::algorithm::join(subjectWords, " ");
     }
     
@@ -245,9 +246,8 @@ complex_match(std::string subject, std::vector<std::vector<std::string>> targets
             
             bool found_match = false;
             if(lowerSubject == lowerAlias) {
-                oklog("found exact match");
                 if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
-                    return i;
+                    return {i};
                 }
                 exactMatches.push_back(i);
                 found_match = true;
@@ -268,14 +268,14 @@ complex_match(std::string subject, std::vector<std::vector<std::string>> targets
     }
     
     if (ordinal > 0) {
-        if(ordinal <= exactMatches.size()) return exactMatches[ordinal - 1];
-        if(ordinal <= startMatches.size()) return startMatches[ordinal - 1];
-        if(ordinal <= containMatches.size()) return containMatches[ordinal - 1];
-        return FAILED_MATCH;
+        if(ordinal <= exactMatches.size()) return {exactMatches[ordinal - 1]};
+        if(ordinal <= startMatches.size()) return {startMatches[ordinal - 1]};
+        if(ordinal <= containMatches.size()) return {containMatches[ordinal - 1]};
+        return {};
     }
 
-    if(exactMatches.size() > 0) return AMBIGUOUS;
-    if(startMatches.size() > 0) return AMBIGUOUS;
-    if(containMatches.size() > 0) return AMBIGUOUS;
-    return FAILED_MATCH;
+    if(exactMatches.size() > 0) return exactMatches;
+    if(startMatches.size() > 0) return startMatches;
+    if(containMatches.size() > 0) return containMatches;
+    return {};
 }

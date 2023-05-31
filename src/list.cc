@@ -1384,18 +1384,11 @@ bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
     }
 
     // Now that we have our keys parsed out, the only thing left to do is run a match.
-    int index = complex_match(std::string(arglist.v.list[1].v.str), keys);
-    if (index == FAILED_MATCH || index == AMBIGUOUS) {
-        free_var(arglist);
-        Var r;
-        r.type = TYPE_OBJ;
-        r.v.obj = index;
-        return make_var_pack(r);
+    std::vector<int> matches = complex_match(std::string(arglist.v.list[1].v.str), keys);
+    Var r = new_list(matches.size());
+    for (int i=0;i < matches.size();i++) {
+        r.v.list[i + 1] = var_dup(arglist.v.list[2].v.list[i + 1]);
     }
-
-    
-    Var r = var_dup(arglist.v.list[2].v.list[index + 1]);
-    free_var(arglist);
     return make_var_pack(r);
 }
 
