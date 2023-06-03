@@ -368,7 +368,7 @@ class PostgreSQLSession: public SQLSession {
 
                 // Get results
                 *ret = new_list(0);
-                for (auto row: res) {
+                for (const auto &row: res) {
                     Var rv = new_list(0);
                     for (auto col: row) {
                         char *str = (char*)col.c_str();

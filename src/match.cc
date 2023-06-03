@@ -45,74 +45,34 @@ aliases(Objid oid)
 }
 
 struct match_data {
-    int lname;
     const char *name;
-    Objid exact, partial;
+    std::vector<Objid> targets;
+    std::vector<std::vector<std::string>> keys;
 };
 
 static int
 match_proc(void *data, Objid oid)
 {
     struct match_data *d = (struct match_data *)data;
+    std::vector<std::string> keys;
     Var *names = aliases(oid);
-    int i;
+
     const char *name;
 
-    for (i = 0; i <= names[0].v.num; i++) {
+    for (int i = 0; i <= names[0].v.num; i++) {
         if (i == 0)
             name = db_object_name(oid);
         else if (names[i].type != TYPE_STR)
             continue;
         else
             name = names[i].v.str;
-
-        if (!strncasecmp(name, d->name, d->lname)) {
-            if (name[d->lname] == '\0') {   /* exact match */
-                if (d->exact == NOTHING || d->exact == oid)
-                    d->exact = oid;
-                else
-                    return 1;
-            } else {        /* partial match */
-                if (d->partial == FAILED_MATCH || d->partial == oid)
-                    d->partial = oid;
-                else
-                    d->partial = AMBIGUOUS;
-            }
-        }
+        keys.push_back(name);
     }
+
+    d->targets.push_back(oid);
+    d->keys.push_back(keys);
 
     return 0;
-}
-
-static Objid
-match_contents(Objid player, const char *name)
-{
-    Objid loc;
-    int step;
-    Objid oid;
-    struct match_data d;
-
-    d.lname = strlen(name);
-    d.name = name;
-    d.exact = NOTHING;
-    d.partial = FAILED_MATCH;
-
-    if (!valid(player))
-        return FAILED_MATCH;
-    loc = db_object_location(player);
-
-    for (oid = player, step = 0; step < 2; oid = loc, step++) {
-        if (!valid(oid))
-            continue;
-        if (db_for_all_contents(oid, match_proc, &d))
-            /* We only abort the enumeration for exact ambiguous matches... */
-            return AMBIGUOUS;
-    }
-
-    if (d.exact != NOTHING)
-        return d.exact;
-    else
-        return d.partial;
 }
 
 Objid
@@ -134,7 +94,23 @@ match_object(Objid player, const char *name)
         return player;
     if (!strcasecmp(name, "here"))
         return db_object_location(player);
-    return match_contents(player, name);
+        
+    int step;
+    Objid oid;
+    Objid loc = db_object_location(player);
+    struct match_data d;
+    for (oid = player, step = 0; step < 2; oid = loc, step++) {
+        if (!valid(oid))
+            continue;
+        db_for_all_contents(oid, match_proc, &d);
+    }
+
+    const std::vector<int> matches = complex_match(name, d.keys);
+    if (matches.size() <= 0)
+      return FAILED_MATCH;
+    if (matches.size() == 1)
+      return d.targets[matches.back()];
+    return AMBIGUOUS;
 }
 
 int findOrdinalIndex(const std::string& str, const std::vector<std::vector<std::string>>& ordinals) {
