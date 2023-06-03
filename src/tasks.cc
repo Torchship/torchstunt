@@ -128,17 +128,6 @@ enum parsing_status {
     DONE = 3
 };
 
-struct http_parsing_state {
-    struct http_parser parser;
-    enum parsing_status status;
-    Var uri;
-    Var headers;
-    Var header_field_under_constr;
-    Var header_value_under_constr;
-    Var body;
-    Var result;
-};
-
 typedef struct tqueue {
     /*
      * A task queue can be in one of four possible states, depending upon the
@@ -205,15 +194,7 @@ typedef struct tqueue {
     int hold_input: 1;      /* input tasks must wait for read() */
     int disable_oob: 1;     /* treat all input lines as inband */
     int reading: 1;     /* some task is blocked on read() */
-    int parsing: 1;     /* some task is blocked on read_http() */
     int icmds: 8;       /* which of .program/PREFIX/... are enabled */
-
-    /* Once a `http_parsing_state' is allocated and assigned to a task
-     * queue, it is not freed until the task queue is freed -- the
-     * theory being that once a connection is used for HTTP it's
-     * likely to be reused for HTTP.
-     */
-    struct http_parsing_state *parsing_state;
 
     vm reading_vm;
 } tqueue;
@@ -342,41 +323,6 @@ icmd_set_flags(tqueue * tq, Var list)
 }
 
 static void
-init_http_parsing_state(struct http_parsing_state *state)
-{
-    state->status = READY;
-#define INIT_VAR(XX)        \
-    {               \
-        (XX).type = TYPE_NONE;  \
-    }
-    INIT_VAR(state->uri);
-    INIT_VAR(state->header_field_under_constr);
-    INIT_VAR(state->header_value_under_constr);
-    INIT_VAR(state->headers);
-    INIT_VAR(state->body);
-    INIT_VAR(state->result);
-#undef INIT_VAR
-}
-
-static void
-reset_http_parsing_state(struct http_parsing_state *state)
-{
-    state->status = READY;
-#define RESET_VAR(XX)       \
-    {               \
-        free_var(XX);       \
-        (XX).type = TYPE_NONE;  \
-    }
-    RESET_VAR(state->uri);
-    RESET_VAR(state->header_field_under_constr);
-    RESET_VAR(state->header_value_under_constr);
-    RESET_VAR(state->headers);
-    RESET_VAR(state->body);
-    RESET_VAR(state->result);
-#undef RESET_VAR
-}
-
-static void
 deactivate_tqueue(tqueue * tq)
 {
     tq->usage = NO_USAGE;
@@ -460,14 +406,11 @@ find_tqueue(Objid player, int create_if_not_found)
     tq->program_stream = nullptr;
 
     tq->reading = 0;
-    tq->parsing = 0;
     tq->hold_input = 0;
     tq->disable_oob = 0;
     tq->icmds = ICMD_ALL_CMDS;
     tq->num_bg_tasks = 0;
     tq->last_input_task_id = 0;
-
-    tq->parsing_state = nullptr;
 
     return tq;
 }
@@ -487,10 +430,6 @@ free_tqueue(tqueue * tq)
         free_stream(tq->program_stream);
     if (tq->reading)
         free_vm(tq->reading_vm, 1);
-    if (tq->parsing_state) {
-        reset_http_parsing_state(tq->parsing_state);
-        myfree(tq->parsing_state, M_STRUCT);
-    }
 
     *(tq->prev) = tq->next;
     if (tq->next)
@@ -1366,56 +1305,11 @@ make_reading_task(vm the_vm, void *data)
         return E_INVARG;
     else {
         tq->reading = 1;
-        tq->parsing = 0;
         tq->reading_vm = the_vm;
         if (tq->first_input)    /* Anything to read? */
             ensure_usage(tq);
         return E_NONE;
     }
-}
-
-/* A connection that's used to read/parse HTTP will probably be used
- * to read/parse HTTP again -- so we allocate a struct for holding
- * parsing state once and reuse it.
- */
-static enum error
-make_http_task(vm the_vm, Objid player, int request)
-{
-    tqueue *tq = find_tqueue(player, 0);
-
-    if (!tq || tq->reading || is_out_of_input(tq))
-        return E_INVARG;
-    else {
-        tq->reading = 1;
-        tq->parsing = 1;
-        tq->reading_vm = the_vm;
-        if (tq->parsing_state == nullptr) {
-            tq->parsing_state =
-            (http_parsing_state *)mymalloc(sizeof(struct http_parsing_state), M_STRUCT);
-            init_http_parsing_state(tq->parsing_state);
-        }
-        tq->parsing_state->status = PARSING;
-        tq->parsing_state->parser.data = tq;
-        http_parser_init(&tq->parsing_state->parser,
-                         request ? HTTP_REQUEST : HTTP_RESPONSE);
-        if (tq->first_input)    /* Anything to read? */
-            ensure_usage(tq);
-        return E_NONE;
-    }
-}
-
-enum error
-make_parsing_http_request_task(vm the_vm, void *data)
-{
-    Objid player = *((Objid *) data);
-    return make_http_task(the_vm, player, 1);
-}
-
-enum error
-make_parsing_http_response_task(vm the_vm, void *data)
-{
-    Objid player = *((Objid *) data);
-    return make_http_task(the_vm, player, 0);
 }
 
 int
@@ -1476,140 +1370,6 @@ create_or_extend(Var in, const char *_new, int newlen)
     return out;
 }
 
-static int
-on_message_begin_callback(http_parser *parser)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-    state->result = new_map();
-    return 0;
-}
-
-static int
-on_url_callback(http_parser *parser, const char *url, size_t length)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-    state->uri = create_or_extend(state->uri, url, length);
-    return 0;
-}
-
-static void
-maybe_complete_header(struct http_parsing_state *state)
-{
-    if (state->headers.type != TYPE_MAP) {
-        free_var(state->headers);
-        state->headers = new_map();
-    }
-
-    if (state->header_value_under_constr.type == TYPE_STR) {
-        state->headers = mapinsert(state->headers,
-                                   state->header_field_under_constr,
-                                   state->header_value_under_constr);
-        state->header_field_under_constr.type = TYPE_NONE;
-        state->header_value_under_constr.type = TYPE_NONE;
-    }
-}
-
-static int
-on_header_field_callback(http_parser *parser, const char *field, size_t length)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-
-    maybe_complete_header(state);
-
-    state->header_field_under_constr = create_or_extend(state->header_field_under_constr, field, length);
-
-    return 0;
-}
-
-static int
-on_header_value_callback(http_parser *parser, const char *value, size_t length)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-
-    state->header_value_under_constr = create_or_extend(state->header_value_under_constr, value, length);
-
-    return 0;
-}
-
-static int
-on_headers_complete_callback(http_parser *parser)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-
-    maybe_complete_header(state);
-
-    return 0;
-}
-
-static int
-on_body_callback(http_parser *parser, const char *body, size_t length)
-{
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-
-    state->body = create_or_extend(state->body, body, length);
-
-    return 0;
-}
-
-static int
-on_message_complete_callback(http_parser *parser)
-{
-    static Var URI, METHOD, HEADERS, BODY, STATUS;
-    static int init = 0;
-    if (!init) {
-        init = 1;
-
-#define INIT_KEY(var, val)      \
-    var.type = TYPE_STR;        \
-    var.v.str = str_dup(val)
-
-        INIT_KEY(URI, "uri");
-        INIT_KEY(METHOD, "method");
-        INIT_KEY(HEADERS, "headers");
-        INIT_KEY(BODY, "body");
-        INIT_KEY(STATUS, "status");
-
-#undef INIT_KEY
-    }
-
-    struct http_parsing_state *state = (struct http_parsing_state *)parser;
-
-    if (parser->type == HTTP_REQUEST) {
-        Var method;
-        method.type = TYPE_STR;
-        method.v.str = str_dup(http_method_str((http_method)state->parser.method));
-        state->result = mapinsert(state->result, var_dup(METHOD), method);
-    }
-    else { /* HTTP_RESPONSE */
-        Var status;
-        status.type = TYPE_INT;
-        status.v.num = parser->status_code;
-        state->result = mapinsert(state->result, var_dup(STATUS), status);
-    }
-
-    if (state->uri.type == TYPE_STR)
-        state->result = mapinsert(state->result, var_dup(URI), var_dup(state->uri));
-
-    if (state->headers.type == TYPE_MAP)
-        state->result = mapinsert(state->result, var_dup(HEADERS), var_dup(state->headers));
-
-    if (state->body.type == TYPE_STR)
-        state->result = mapinsert(state->result, var_dup(BODY), var_dup(state->body));
-
-    state->status = DONE;
-
-    return 0;
-}
-
-static http_parser_settings settings = {on_message_begin_callback,
-                                        on_url_callback,
-                                        on_header_field_callback,
-                                        on_header_value_callback,
-                                        on_headers_complete_callback,
-                                        on_body_callback,
-                                        on_message_complete_callback
-                                       };
-
 /* There is surprisingness in how tasks actually get created in
  * response to player input, so I'm documenting it here.
  * `run_ready_tasks' turns player input into tasks (and verb calls).
@@ -1654,9 +1414,6 @@ run_ready_tasks(void)
                 Var v;
 
                 tq->reading = 0;
-                tq->parsing = 0;
-                if (tq->parsing_state != nullptr)
-                    reset_http_parsing_state(tq->parsing_state);
                 current_task_id = tq->reading_vm->task_id;
                 current_local = var_ref(tq->reading_vm->local);
                 v.type = TYPE_ERR;
@@ -1687,66 +1444,9 @@ run_ready_tasks(void)
                         break;
                     case TASK_BINARY:
                     case TASK_INBAND:
-                        if (tq->reading && tq->parsing) {
-                            int done = 0;
-                            int len;
-                            const char *binary = binary_to_raw_bytes(t->t.input.string, &len);
-                            if (binary == nullptr) {
-                                /* This can happen if someone forces an
-                                 * invalid binary string as input on this
-                                 * connection!
-                                 */
-                                /* It can happen even before the
-                                 * `on_message_begin_callback()' is
-                                 * called.
-                                 */
-                                if (tq->parsing_state->status == PARSING)
-                                    free_var(tq->parsing_state->result);
-                                tq->parsing_state->result = var_ref(zero);
-                                done = 1;
-                            }
-                            else {
-                                http_parser_execute(&tq->parsing_state->parser, &settings, binary, len);
-                                if (tq->parsing_state->parser.http_errno != HPE_OK) {
-                                    Var key, value;
-                                    key.type = TYPE_STR;
-                                    key.v.str = str_dup("error");
-                                    value = new_list(2);
-                                    value.v.list[1].type = TYPE_STR;
-                                    value.v.list[1].v.str = str_dup(http_errno_name((http_errno)tq->parsing_state->parser.http_errno));
-                                    value.v.list[2].type = TYPE_STR;
-                                    value.v.list[2].v.str = str_dup(http_errno_description((http_errno)tq->parsing_state->parser.http_errno));
-                                    tq->parsing_state->result = mapinsert(tq->parsing_state->result, key, value);
-                                    done = 1;
-                                }
-                                else if (tq->parsing_state->parser.upgrade) {
-                                    Var key;
-                                    key.type = TYPE_STR;
-                                    key.v.str = str_dup("upgrade");
-                                    tq->parsing_state->result = mapinsert(tq->parsing_state->result, key, Var::new_int(1));
-                                    done = 1;
-                                }
-                                else if (tq->parsing_state->status == DONE)
-                                    done = 1;
-                            }
-                            if (done) {
-                                Var v = var_ref(tq->parsing_state->result);
-                                tq->reading = 0;
-                                tq->parsing = 0;
-                                reset_http_parsing_state(tq->parsing_state);
-                                current_task_id = tq->reading_vm->task_id;
-                                current_local = var_ref(tq->reading_vm->local);
-                                resume_from_previous_vm(tq->reading_vm, v);
-                                free_var(v);
-                                current_task_id = -1;
-                                free_var(current_local);
-                            }
-                            did_one = 1;
-                        }
-                        else if (tq->reading) {
+                        if (tq->reading) {
                             Var v;
                             tq->reading = 0;
-                            tq->parsing = 0;
                             current_task_id = tq->reading_vm->task_id;
                             current_local = var_ref(tq->reading_vm->local);
                             v.type = TYPE_STR;
@@ -1979,7 +1679,7 @@ write_task_queue(void)
     interrupted_count = qdata.i;
 
     /* All tasks that are reading are interrupted -- this includes
-       tasks that called both `read()' and `read_http()'.
+       tasks that called `read()'.
      */
     for (tq = idle_tqueues; tq; tq = tq->next)
         if (tq->reading)
@@ -2283,7 +1983,6 @@ bf_queue_info(Var arglist, Byte next, void *vdata, Objid progr)
             res = mapinsert(res, var_ref(queue_hold_input), Var::new_bool(tq->usage));
             res = mapinsert(res, var_ref(queue_disable_oob), Var::new_bool(tq->disable_oob));
             res = mapinsert(res, var_ref(queue_reading), Var::new_bool(tq->reading));
-            res = mapinsert(res, var_ref(queue_parsing), Var::new_bool(tq->parsing));
             res = mapinsert(res, var_ref(queue_vm), tq->reading ?
                             Var::new_int(tq->reading_vm->task_id) :
                             Var::new_int(0));
@@ -2703,9 +2402,6 @@ kill_task(int id, Objid owner)
                 return E_PERM;
             free_vm(tq->reading_vm, 1);
             tq->reading = 0;
-            tq->parsing = 0;
-            if (tq->parsing_state != nullptr)
-                reset_http_parsing_state(tq->parsing_state);
             return E_NONE;
         }
     }
@@ -2717,9 +2413,6 @@ kill_task(int id, Objid owner)
                 return E_PERM;
             free_vm(tq->reading_vm, 1);
             tq->reading = 0;
-            tq->parsing = 0;
-            if (tq->parsing_state != nullptr)
-                reset_http_parsing_state(tq->parsing_state);
             return E_NONE;
         }
         for (tt = &(tq->first_bg); *tt; tt = &((*tt)->next)) {
