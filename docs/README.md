@@ -1,6 +1,11 @@
-# ToastStunt
+# Torchstunt
 
-ToastStunt is a network accessible, multi-user, programmable, interactive system used in the creation of both text-based and web-based experiences. The most common usage is the creation of MUDs (examples include [Miriani](https://www.toastsoft.net) and [ChatMud](https://www.chatmud.com/)). ToastStunt is a fork of [Stunt](https://github.com/toddsundsted/stunt), which is a fork of [LambdaMOO](https://github.com/wrog/lambdamoo). It builds upon those projects to add improved performance, modern conveniences, and an improved user experience.
+Torchstunt is a network accessible, multi-user, programmable, interactive system used in the creation of both text-based and web-based experiences. The most common usage is the creation of MUDs (examples include [Miriani](https://www.toastsoft.net) and [Torchship](https://torchship.com/)). Torchship is a fork of [ToastStunt](https://github.com/lisdude/toaststunt), which is a fork of [Stunt](https://github.com/toddsundsted/stunt), which is a fork of [LambdaMOO](https://github.com/wrog/lambdamoo).
+
+Torchstunt was designed as a foundation for Torchship and is a highly opinionated fork that makes several deviations from its predecessors including:
+* A lighter feature-set (Some builtins have been culled)
+* More reliancy on dependencies (such as boost)
+* Breaking changes (such as changing how the parser works or replacing how SQL is handled)
 
 * [Features](#features)
 * [ChangeLog](ChangeLog.md)
