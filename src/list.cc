@@ -1355,17 +1355,17 @@ bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
                 case TYPE_STR:
                     key_index.push_back(std::string(arglist.v.list[2].v.list[i].v.str));
                     break;
-                case TYPE_OBJ:
-                    names = aliases(arglist.v.list[2].v.list[i].v.obj);
-                    for (i = 0; i <= names[0].v.num; i++) {
-                        if (i == 0)
-                            key_index.push_back(db_object_name(arglist.v.list[2].v.list[i].v.obj));
-                        else if (names[i].type != TYPE_STR)
-                            continue;
-                        else
-                            key_index.push_back(std::string(names[i].v.str));
-                    }
-                    break;
+                // case TYPE_OBJ:
+                //     names = aliases(arglist.v.list[2].v.list[i].v.obj);
+                //     for (i = 0; i <= names[0].v.num; i++) {
+                //         if (i == 0)
+                //             key_index.push_back(db_object_name(arglist.v.list[2].v.list[i].v.obj));
+                //         else if (names[i].type != TYPE_STR)
+                //             continue;
+                //         else
+                //             key_index.push_back(std::string(names[i].v.str));
+                //     }
+                //     break;
                 case TYPE_LIST:
                     for (int x = 1; x <= arglist.v.list[2].v.list[i].v.list[0].v.num; x++) {
                         if (arglist.v.list[2].v.list[i].v.list[x].type != TYPE_STR) {

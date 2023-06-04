@@ -20,6 +20,8 @@
 #include <vector>
 #include <regex>
 #include <boost/algorithm/string.hpp>
+#include <boost/range/algorithm.hpp>
+#include <boost/range/adaptors.hpp>
 
 #include "config.h"
 #include "db.h"
@@ -29,23 +31,73 @@
 #include "storage.h"
 #include "unparse.h"
 #include "utils.h"
+#include "tasks.h"
+#include "list.h"
 
-Var *
-aliases(Objid oid)
+std::vector<std::string>
+var_to_vector(Var *v) 
 {
-    Var value;
-    db_prop_handle h;
+    std::vector<std::string> results;
+    switch (v->type) {
+        case TYPE_LIST:
+            for (int i=1; i <= v->v.list[0].v.num;i++) {
+                if (v->v.list[i].type != TYPE_STR) continue;
+                results.push_back(std::string(v->v.list[i].v.str));
+            }
+            break;
+        case TYPE_STR:
+            results.push_back(std::string(v->v.str));
+            break;
+    }
+    return results;
+}
 
-    h = db_find_property(Var::new_obj(oid), "aliases", &value);
-    if (!h.ptr || value.type != TYPE_LIST) {
-        /* Simulate a pointer to an empty list */
-        return &zero;
-    } else
-        return value.v.list;
+std::vector<std::string>
+name_and_aliases(Objid player, Objid oid)
+{
+    std::vector<std::string> results;
+    Var args = new_list(1);
+    args.v.list[1].type = TYPE_OBJ;
+    args.v.list[1].v.obj = oid;
+    Var sysobj = Var::new_obj(SYSTEM_OBJECT);
+
+    Var r;
+    if (run_server_task(player, sysobj, "_name_of", var_dup(args), "", &r) == OUTCOME_DONE && r.type == TYPE_STR) {        
+        std::vector<std::string> unionVector;
+        boost::range::set_union(results, var_to_vector(&r), std::back_inserter(unionVector));
+        results = unionVector;
+        free_var(r);
+        r = Var();
+    } else {
+        results.push_back(db_object_name(oid));
+    }
+
+    
+    if (run_server_task(player, sysobj, "_aliases_of", var_dup(args), "", &r) == OUTCOME_DONE && r.type == TYPE_LIST) {
+        std::vector<std::string> unionVector;
+        boost::range::set_union(results, var_to_vector(&r), std::back_inserter(unionVector));
+        results = unionVector;
+        free_var(r);
+    } else {
+        db_prop_handle h;
+        h = db_find_property(Var::new_obj(oid), "aliases", &r);
+        if (!h.ptr || r.type != TYPE_LIST) {
+            // Do nothing it was an empty list.
+        } else {
+            std::vector<std::string> unionVector;
+            boost::range::set_union(results, var_to_vector(&r), std::back_inserter(unionVector));
+            results = unionVector;
+        }
+    }
+
+    free_var(sysobj);
+    free_var(args);
+    return results;
 }
 
 struct match_data {
     const char *name;
+    Objid player;
     std::vector<Objid> targets;
     std::vector<std::vector<std::string>> keys;
 };
@@ -54,20 +106,7 @@ static int
 match_proc(void *data, Objid oid)
 {
     struct match_data *d = (struct match_data *)data;
-    std::vector<std::string> keys;
-    Var *names = aliases(oid);
-
-    const char *name;
-
-    for (int i = 0; i <= names[0].v.num; i++) {
-        if (i == 0)
-            name = db_object_name(oid);
-        else if (names[i].type != TYPE_STR)
-            continue;
-        else
-            name = names[i].v.str;
-        keys.push_back(name);
-    }
+    std::vector<std::string> keys = name_and_aliases(d->player, oid);
 
     d->targets.push_back(oid);
     d->keys.push_back(keys);
@@ -99,6 +138,7 @@ match_object(Objid player, const char *name)
     Objid oid;
     Objid loc = db_object_location(player);
     struct match_data d;
+    d.player = player;
     for (oid = player, step = 0; step < 2; oid = loc, step++) {
         if (!valid(oid))
             continue;
