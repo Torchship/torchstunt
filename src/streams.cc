@@ -80,6 +80,19 @@ stream_add_char(Stream * s, char c)
     s->buffer[s->current++] = c;
 }
 
+char
+stream_last_char(Stream * s)
+{
+    if (s->current <= 0) return '\0';
+    return s->buffer[s->current - 1];
+}
+
+char
+stream_first_char(Stream * s)
+{
+    return s->buffer[0];
+}
+
 void
 stream_delete_char(Stream * s)
 {
@@ -154,4 +167,28 @@ int
 stream_length(Stream * s)
 {
     return s->current;
+}
+
+bool
+stream_cmp(Stream * s, const char * t)
+{
+    if (stream_length(s) != strlen(t)) return false;
+    for (int i = 0; i < s->current; i++) {
+        if (s->buffer[i] != t[i]) return false;
+    }
+    return true;
+}
+
+bool
+stream_empty_or_whitespace(Stream * s)
+{
+    if (s->current == 0)
+        return true;
+
+    for (int i = 0; i < s->current; i++) {
+        if (!isspace((unsigned char)s->buffer[i]))
+            return false;
+    }
+
+    return true;
 }

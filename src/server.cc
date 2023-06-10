@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <list>
+#include <memory>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>       // getrusage
@@ -34,7 +35,6 @@
 #include <algorithm>
 #include <sstream>
 #include <fstream>
-#include <vector>
 
 #include <sys/types.h>      /* must be first on some systems */
 #include <signal.h>
@@ -3179,40 +3179,94 @@ const char* enum_to_c_str(token_op op) {
 
 #define COMMIT_AND_ADD(tokens, token) \
 do { \
-    if (!token.totally_empty()) tokens.push_back(token);  \
-    token = {}; \
+    if (!token->totally_empty()) tokens.push_back(std::unique_ptr<InputToken, TokenCleaner>(token));  \
+    token = new_token(token_op::TEXT); \
 } while (0)
 
-struct InputToken {
-    token_op operation = token_op::TEXT; // Current token operation.
-    std::string content; // The content we've assembled so far...
-    Objid target = NOTHING;
-    std::string postfix; // This is typically punctuation appended to the end of content
-    std::string prefix; 
+typedef struct {
+    token_op operation; // Current token operation.
+    Stream *content; // The content we've assembled so far...
+    Objid target;
+    Stream *postfix; // This is typically punctuation appended to the end of content
+    Stream *prefix; 
     
     bool empty() {
-        return this->content.empty();
+        if (!this->content) return true;
+        return stream_length(this->content) == 0;
     }
 
     // Called if there's really no content at all.
     bool totally_empty() {
-        return this->empty() && this->postfix.empty() && this->prefix.empty();
+        if (!this->postfix) return true;
+        if (!this->prefix) return true;
+        return this->empty() && stream_length(this->postfix) == 0 && stream_length(this->prefix) == 0;
     }
-};
+} InputToken;
 
-static bool isPossessivePronoun(std::string word) {
-    std::vector<std::string> possessivePronouns = {"my", "your", "his", "her", "their", "whose"};
-    return (find(possessivePronouns.begin(), possessivePronouns.end(), word) != possessivePronouns.end());
+InputToken*
+new_token(token_op operation)
+{
+    InputToken *s = (InputToken *)mymalloc(sizeof(InputToken), M_INPUTTOKEN);
+
+    s->operation = operation;
+    s->content = new_stream(100);
+    s->target = NOTHING;
+    s->postfix = new_stream(1);
+    s->prefix = new_stream(1);
+
+    return s;
 }
 
-static bool isReflexivePronoun(std::string word) {
-    std::vector<std::string> reflexivePronouns = {"myself", "yourself", "himself", "herself", "yourselves", "themselves"};
-    return (find(reflexivePronouns.begin(), reflexivePronouns.end(), word) != reflexivePronouns.end());
+void
+free_token(InputToken * s)
+{
+    free_stream(s->content);
+    free_stream(s->postfix);
+    free_stream(s->prefix);
+    myfree(s, M_INPUTTOKEN);
 }
 
-static bool isPronoun(std::string word) {
-    std::vector<std::string> pronouns = {"I", "me", "you", "he", "she", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "themselves"};
-    return isPossessivePronoun(word) || isReflexivePronoun(word) || (find(pronouns.begin(), pronouns.end(), word) != pronouns.end());
+bool isPossessivePronoun(const char* word) {
+    const char* possessivePronouns[] = {"my", "your", "his", "her", "their", "whose"};
+    size_t numPossessivePronouns = sizeof(possessivePronouns) / sizeof(possessivePronouns[0]);
+    
+    for (size_t i = 0; i < numPossessivePronouns; i++) {
+        if (strcmp(word, possessivePronouns[i]) == 0) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool isReflexivePronoun(const char* word) {
+    const char* reflexivePronouns[] = {"myself", "yourself", "himself", "herself", "yourselves", "themselves"};
+    size_t numReflexivePronouns = sizeof(reflexivePronouns) / sizeof(reflexivePronouns[0]);
+    
+    for (size_t i = 0; i < numReflexivePronouns; i++) {
+        if (strcmp(word, reflexivePronouns[i]) == 0) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool isPronoun(const char* word) {
+    const char* pronouns[] = {"I", "me", "you", "he", "she", "they", "him", "her", "them", "myself", "yourself", "himself", "herself", "themselves"};
+    size_t numPronouns = sizeof(pronouns) / sizeof(pronouns[0]);
+    
+    if (isPossessivePronoun(word) || isReflexivePronoun(word)) {
+        return true;
+    }
+    
+    for (size_t i = 0; i < numPronouns; i++) {
+        if (strcmp(word, pronouns[i]) == 0) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 static bool isGrammaticalPunctuation(char c) {
@@ -3228,23 +3282,30 @@ static bool isGrammaticalPunctuation(char c) {
     return false; // Character is not a punctuation mark
 }
 
+struct TokenCleaner {
+    void operator()(InputToken* token) {
+        if (!token) return;
+        free_token(token);
+    }
+};
+
 static package
 bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
 {
     int nargs = arglist.v.list[0].v.num;
     Objid speaker = nargs >= 1 ? arglist.v.list[1].v.obj : 0;
-    std::string input_string = nargs >= 2 ? arglist.v.list[2].v.str : "";
+    const char* input_string = nargs >= 2 ? arglist.v.list[2].v.str : "";
 
-    std::list<InputToken> tokens;
-    int input_length = input_string.length();
+    std::list<std::unique_ptr<InputToken, TokenCleaner>> tokens;
+    int input_length = strlen(input_string);
 
-    InputToken token; // our current token    
+    InputToken* token = new_token(token_op::TEXT); // our current token    
     Objid subject = NOTHING;
     Objid match = NOTHING;
     for (int i = 0; i < input_length; i++) {
-        char c = input_string[i]; // Current character
+        const char c = input_string[i]; // Current character
         // Top level is our MODE
-        if (token.operation == token_op::SPEECH) {
+        if (token->operation == token_op::SPEECH) {
             // Speech mode is fairly closed loop and simple. We're just
             // gobbling up all speech until we reach our end character.
             if (c == '"') {
@@ -3253,14 +3314,14 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 continue;
             }
             // Gobble
-            token.content += c;
+            stream_add_char(token->content, c);
             continue;
         }
         // This is probably TEXT mode. It's the meat of the parser.
         // Very first we check if we're entering speech mode as it's tbh the easiest
         if (c == '"') {
-          if (!token.totally_empty()) COMMIT_AND_ADD(tokens, token); // Reboot token if we we're on a word
-          token = {token_op::SPEECH};
+          if (!token->totally_empty()) COMMIT_AND_ADD(tokens, token); // Reboot token if we we're on a word
+          token = new_token(token_op::SPEECH);
           continue;
         }
         bool is_punct = std::ispunct(c) && c != '-' && c != '&' && c != '-';
@@ -3275,29 +3336,29 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         // EXAMPLE: Foo, => word 'Foo', postfix ','
         if (!is_space && !is_punct) {
             // In TEXT mode any alphanumeric character just gets added to content.
-            token.content += c;
+            stream_add_char(token->content, c);
             continue;
         }
 
         // ATTENTION: We need to add punctuation to prefix/postfix BEFORE processing
         // Because that's how some of the special functions match!!!
         if (is_punct) {
-            if (token.empty()) {
-                token.prefix += c;
+            if (token->empty()) {
+                stream_add_char(token->prefix, c);
                 continue;
             }
             else 
             {
-                token.postfix += c;
+                stream_add_char(token->postfix, c);
                 // Subject reset
                 if (c == '.')
                     subject = NOTHING;
             }
         }
 
-        if (token.empty()) {
+        if (token->empty()) {
             // Optimization guard check
-            token.prefix += c;
+            stream_add_char(token->prefix, c);
             continue;
         }
 
@@ -3305,56 +3366,56 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         // prefix '.', word 'look'[, postfix ',']
         // prefix '%<', word 'look', postfix '>'
         // word 'Foo'[, postfix ',']
-        if (!token.prefix.empty() && token.prefix.back() == '.')
+        if (stream_length(token->prefix) != 0 && stream_last_char(token->prefix) == '.')
         {
-            token.operation = token_op::VERB;
-            token.prefix.pop_back();
-        } else if (token.prefix == "%<" && token.postfix == ">") {
-            token.operation = token_op::VERB;
-            token.prefix.clear();
-            token.postfix.clear();
-        } else if (token.prefix == "%") {
-            token.operation = token_op::SUBSTITUTION;
-            token.prefix.clear();
-        } else if (std::isupper(token.content[0]) && token.content.length() > 3 && valid(match = match_object(speaker, token.content.c_str()))) {
+            token->operation = token_op::VERB;
+            stream_delete_char(token->prefix);
+        } else if (stream_cmp(token->prefix, "%<") && stream_cmp(token->postfix, ">")) {
+            token->operation = token_op::VERB;
+            reset_stream(token->prefix);
+            reset_stream(token->postfix);
+        } else if (stream_cmp(token->prefix, "%")) {
+            token->operation = token_op::SUBSTITUTION;
+            reset_stream(token->prefix);
+        } else if (std::isupper(stream_first_char(token->content)) && stream_length(token->content) > 3 && valid(match = match_object(speaker, stream_contents(token->content)))) {
             // If we match this we found something in the local area that matches.
             subject = match;
-            token.operation = token_op::TARGET;
+            token->operation = token_op::TARGET;
             if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
-              token.operation = token_op::POSSESSIVE_TARGET;
-              token.postfix.pop_back(); // This clear's the possessive from the buffer.
+              token->operation = token_op::POSSESSIVE_TARGET;
+              stream_delete_char(token->postfix); // This clear's the possessive from the buffer.
               ++i; // This will clear the oncoming s.
             }
-            token.target = subject;
-        } else if (!token.prefix.empty() && token.prefix.back() == '/') {
+            token->target = subject;
+        } else if (stream_length(token->prefix) != 0 && stream_last_char(token->prefix) == '/') {
             // This is probably a macro.
-            token.operation = token_op::MACRO;
-            token.prefix.pop_back();
-        } else if (isPronoun(token.content)) {
+            token->operation = token_op::MACRO;
+            stream_delete_char(token->prefix);
+        } else if (isPronoun(stream_contents(token->content))) {
             // token = token.commit_and_clone(tokens);
-            if (token.content == "I" || token.content == "my" || token.content == "me" || token.content == "myself") subject = speaker;
-            token.operation = token_op::TARGET;
-            token.target = subject;
-            if (isPossessivePronoun(token.content))
-                token.operation = token_op::POSSESSIVE_TARGET;
-            else if (isReflexivePronoun(token.content))
-                token.operation = token_op::REFLEXIVE_TARGET;
+            if (stream_cmp(token->content, "I") || stream_cmp(token->content, "my") || stream_cmp(token->content, "me") || stream_cmp(token->content, "myself")) subject = speaker;
+            token->operation = token_op::TARGET;
+            token->target = subject;
+            if (isPossessivePronoun(stream_contents(token->content)))
+                token->operation = token_op::POSSESSIVE_TARGET;
+            else if (isReflexivePronoun(stream_contents(token->content)))
+                token->operation = token_op::REFLEXIVE_TARGET;
         }
 
         // Finally if we're at a space character or a non-text operation we separate
         // into a new token.
         // This is done mostly for convenience as it lets us nom word by word and is readable.
         if (is_space) {
-            token.postfix += c;
+            stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
-        } else if (token.operation != token_op::TEXT) {
+        } else if (token->operation != token_op::TEXT) {
             COMMIT_AND_ADD(tokens, token);
-        } else if (!token.postfix.empty() && std::ispunct(token.postfix.back())) {
+        } else if (stream_length(token->postfix) != 0 && std::ispunct(stream_last_char(token->postfix))) {
             COMMIT_AND_ADD(tokens, token);
         }
     }
 
-    if (!token.totally_empty()) COMMIT_AND_ADD(tokens, token);
+    if (!token->totally_empty()) COMMIT_AND_ADD(tokens, token);
 
     // This is an optimization pass.
     // Essentially every text token can fall into the previous text token
@@ -3362,20 +3423,18 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     for(auto it = std::next(tokens.begin()); it != tokens.end(); /* no increment here */) {
         auto& curr_token = *it;
         auto& prev_token = *std::prev(it);
-        if (curr_token.operation == token_op::TEXT && curr_token.empty()) {
-            prev_token.postfix += curr_token.prefix;
-            prev_token.postfix += curr_token.postfix;
+        if (curr_token->operation == token_op::TEXT && curr_token->empty()) {
+            stream_add_string(prev_token->postfix, stream_contents(curr_token->prefix));
+            stream_add_string(prev_token->postfix, stream_contents(curr_token->postfix));
             it = tokens.erase(it);  // erase and move to the next token
         }
-        else if(prev_token.operation == token_op::TEXT && curr_token.operation == token_op::TEXT) {
-            bool prev_postfix_empty_or_whitespace = prev_token.postfix.empty() || std::all_of(prev_token.postfix.begin(), prev_token.postfix.end(), ::isspace);
-            bool curr_prefix_empty_or_whitespace = curr_token.prefix.empty() || std::all_of(curr_token.prefix.begin(), curr_token.prefix.end(), ::isspace);
-
-            if(prev_postfix_empty_or_whitespace && curr_prefix_empty_or_whitespace) {
-                prev_token.content += prev_token.postfix;
-                prev_token.content += curr_token.prefix;
-                prev_token.content += curr_token.content;
-                prev_token.postfix = curr_token.postfix;
+        else if(prev_token->operation == token_op::TEXT && curr_token->operation == token_op::TEXT) {
+            if(stream_empty_or_whitespace(prev_token->postfix) &&  stream_empty_or_whitespace(curr_token->prefix)) {
+                stream_add_string(prev_token->content, stream_contents(prev_token->postfix));
+                stream_add_string(prev_token->content, stream_contents(curr_token->prefix));
+                stream_add_string(prev_token->content, stream_contents(curr_token->content));
+                free_stream(prev_token->postfix);
+                prev_token->postfix = curr_token->postfix;
                 it = tokens.erase(it);  // erase and move to the next token
             } else {
                 ++it;  // just move to the next token
@@ -3387,19 +3446,19 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
 
     // Here's where we disassemble this weird datastructure I've made into vars.
     Var results = new_list(0);
-    for (InputToken token : tokens) {
+    for (const auto& token : tokens) {
         Var result = new_map();
-        result = mapinsert(result, str_dup_to_var("type"), str_dup_to_var(enum_to_c_str(token.operation)));
-        if (!token.content.empty())
-            result = mapinsert(result, str_dup_to_var("content"), str_dup_to_var(token.content.c_str()));
-        if (!token.prefix.empty())
-          result = mapinsert(result, str_dup_to_var("prefix"), str_dup_to_var(token.prefix.c_str()));
-        if (!token.postfix.empty())
-          result = mapinsert(result, str_dup_to_var("postfix"), str_dup_to_var(token.postfix.c_str()));
-        if (token.target != NOTHING) {
+        result = mapinsert(result, str_dup_to_var("type"), str_dup_to_var(enum_to_c_str(token->operation)));
+        if (stream_length(token->content) != 0)
+            result = mapinsert(result, str_dup_to_var("content"), str_dup_to_var(stream_contents(token->content)));
+        if (stream_length(token->prefix) != 0)
+          result = mapinsert(result, str_dup_to_var("prefix"), str_dup_to_var(stream_contents(token->prefix)));
+        if (stream_length(token->postfix) != 0)
+          result = mapinsert(result, str_dup_to_var("postfix"), str_dup_to_var(stream_contents(token->postfix)));
+        if (token->target != NOTHING) {
             Var obj;
             obj.type = TYPE_OBJ;
-            obj.v.obj = token.target;
+            obj.v.obj = token->target;
             result = mapinsert(result, str_dup_to_var("target"), obj);
         }
         results = listappend(results, result);
