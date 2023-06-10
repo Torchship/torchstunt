@@ -35,19 +35,18 @@
 #include "list.h"
 
 std::vector<std::string>
-var_to_vector(Var *v) 
+var_to_vector(Var v) 
 {
     std::vector<std::string> results;
-    if (!v) return results;
-    switch (v->type) {
+    switch (v.type) {
         case TYPE_LIST:
-            for (int i=1; i <= v->v.list[0].v.num;i++) {
-                if (v->v.list[i].type != TYPE_STR) continue;
-                results.push_back(str_dup(v->v.list[i].v.str));
+            for (int i=1; i <= v.v.list[0].v.num;i++) {
+                if (v.v.list[i].type != TYPE_STR) continue;
+                results.push_back(std::string(v.v.list[i].v.str));
             }
             break;
         case TYPE_STR:
-            results.push_back(str_dup(v->v.str));
+            results.push_back(std::string(v.v.str));
             break;
     }
     return results;
@@ -57,34 +56,33 @@ std::vector<std::string>
 name_and_aliases(Objid player, Objid oid)
 {
     std::vector<std::string> results;
+    Var sysobj = Var::new_obj(SYSTEM_OBJECT);
     Var args = new_list(1);
     args.v.list[1] = Var::new_obj(oid);
 
     Var name;
-    if (run_server_task(player, Var::new_obj(SYSTEM_OBJECT), "_name_of", args, "", &name) == OUTCOME_DONE) {        
+    if (run_server_task(player, sysobj, "_name_of", var_dup(args), "", &name) == OUTCOME_DONE && name.type == TYPE_STR) {        
         std::vector<std::string> unionVector;
-        boost::range::set_union(results, var_to_vector(&name), std::back_inserter(unionVector));
+        boost::range::set_union(results, var_to_vector(name), std::back_inserter(unionVector));
         results = unionVector;
+        free_var(name);
     } else {
         results.push_back(db_object_name(oid));
     }
 
-    args = new_list(1);
-    args.v.list[1] = Var::new_obj(oid);
     Var aliases;
-    if (run_server_task(player, Var::new_obj(SYSTEM_OBJECT), "_aliases_of", args, "", &aliases) == OUTCOME_DONE) {
+    if (run_server_task(player, sysobj, "_aliases_of", var_dup(args), "", &aliases) == OUTCOME_DONE && aliases.type == TYPE_LIST) {
         std::vector<std::string> unionVector;
-        boost::range::set_union(results, var_to_vector(&aliases), std::back_inserter(unionVector));
+        boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
         results = unionVector;
     } else {
         db_prop_handle h;
-        Var r;
-        h = db_find_property(Var::new_obj(oid), "aliases", &r);
-        if (!h.ptr || r.type != TYPE_LIST) {
+        h = db_find_property(Var::new_obj(oid), "aliases", &aliases);
+        if (!h.ptr || aliases.type != TYPE_LIST) {
             // Do nothing it was an empty list.
         } else {
             std::vector<std::string> unionVector;
-            boost::range::set_union(results, var_to_vector(&r), std::back_inserter(unionVector));
+            boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
             results = unionVector;
         }
     }
