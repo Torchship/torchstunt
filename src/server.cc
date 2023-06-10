@@ -3220,9 +3220,9 @@ new_token(token_op operation)
 void
 free_token(InputToken * s)
 {
-    free_stream(s->content);
-    free_stream(s->postfix);
-    free_stream(s->prefix);
+    if (s->content) free_stream(s->content);
+    if (s->postfix) free_stream(s->postfix);
+    if (s->prefix) free_stream(s->prefix);
     myfree(s, M_INPUTTOKEN);
 }
 
@@ -3433,8 +3433,9 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 stream_add_string(prev_token->content, stream_contents(prev_token->postfix));
                 stream_add_string(prev_token->content, stream_contents(curr_token->prefix));
                 stream_add_string(prev_token->content, stream_contents(curr_token->content));
-                free_stream(prev_token->postfix);
-                prev_token->postfix = curr_token->postfix;
+                reset_stream(prev_token->postfix);
+                stream_add_string(prev_token->postfix, stream_contents(curr_token->postfix));
+                reset_stream(curr_token->postfix);
                 it = tokens.erase(it);  // erase and move to the next token
             } else {
                 ++it;  // just move to the next token
