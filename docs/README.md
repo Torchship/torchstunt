@@ -86,13 +86,13 @@ Torchstunt was designed as a foundation for Torchship and is a highly opinionate
 - [Many miscellaneous changes](Features/new_miscellaneous.md)
 
 ## Build Instructions
-### **Sindome Specific Instructions**
+### **Torchstunt Specific Instructions**
 ```bash
 Dont run the DEBIAN/UBUNTU/WSL instructions again
-Make sure the cmake version being used is snaps.
+Make sure the cmake version being used is snap's.
 
 For compiling with modern compilers you need to:
-sudo apt install snap
+sudo apt install snapd
 sudo apt remove --purge cmake
 sudo snap install cmake --classic
 ```
