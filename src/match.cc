@@ -226,8 +226,9 @@ complex_match(const char* inputSubject, Var *targets) {
         Stream* s = new_stream(100);
         for (int i=1; i <= subjectWords.v.list[0].v.num; i++) {
             stream_add_string(s, subjectWords.v.list[i].v.str);
+            if (i < subjectWords.v.list[0].v.num) stream_add_char(s, ' ');
         }
-        subject = stream_contents(s);
+        subject = str_dup(stream_contents(s));
         free_stream(s);
     }
     
@@ -251,7 +252,7 @@ complex_match(const char* inputSubject, Var *targets) {
                 found_match = true;
             }
             
-            if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) > 1) {
+            if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) >= 1) {
                 containMatches.push_back(i);
                 found_match = true;
             }

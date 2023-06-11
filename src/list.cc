@@ -22,7 +22,6 @@
 #include <vector>
 #include <regex>
 #include <unordered_map>
-#include <boost/algorithm/string.hpp>
 
 #include <ctype.h>
 #include <string.h>
@@ -1245,7 +1244,7 @@ bf_pluralize(Var arglist, Byte next, void *vdata, Objid progr)
     int quantity = 1;
     if (arglist.v.list[0].v.num == 2)
       quantity = arglist.v.list[2].v.num;
-    std::string token = boost::algorithm::to_lower_copy(std::string(arglist.v.list[1].v.str));
+    std::string token = std::string(arglist.v.list[1].v.str);
 
     // check for uncountables
     for (const std::regex &rule : UNCOUNTABLE_RULES) {
@@ -1306,91 +1305,86 @@ bf_pluralize(Var arglist, Byte next, void *vdata, Objid progr)
     return make_var_pack(r);
 }
 
-// static package
-// bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
-// {   /* (subject, targets [, keys]) */
-//     std::vector<std::vector<std::string>> keys;
+static package
+bf_complex_match(Var arglist, Byte next, void *vdata, Objid progr)
+{   /* (subject, targets [, keys]) */
+    // std::vector<std::vector<std::string>> keys;
+    Var keys = new_list(0);
 
-//     if (arglist.v.list[0].v.num == 3) {
-//         // There must be as many keys as there are targets.
-//         if (arglist.v.list[3].v.list[0].v.num != arglist.v.list[2].v.list[0].v.num) {
-//             free_var(arglist);
-//             return make_error_pack(E_INVARG);
-//         }
-//         // Compile our keys...
-//         for (int i = 1; i <= arglist.v.list[3].v.list[0].v.num; i++) {
-//             std::vector<std::string> key_index;
-//             switch(arglist.v.list[3].v.list[i].type) {
-//                 case TYPE_STR:
-//                     key_index.push_back(std::string(arglist.v.list[3].v.list[i].v.str));
-//                     break;
-//                 case TYPE_LIST:
-//                     // Someone in the future look at this and go 'what the fuck is actually happening here'
-//                     // ..possibly me..
-//                     // TL;DR we support lists of lists to alias one key result to multiple strings
-//                     // meaning one index target can have multiple strings that will match to it
-//                     // this lets things like .aliases work.
-//                     for (int x = 1; x <= arglist.v.list[3].v.list[i].v.list[0].v.num; x++) {
-//                         if (arglist.v.list[3].v.list[i].v.list[x].type != TYPE_STR) {
-//                             free_var(arglist);
-//                             return make_error_pack(E_INVARG);
-//                         }
-//                         key_index.push_back(std::string(arglist.v.list[3].v.list[i].v.list[x].v.str));
-//                     }
-//                     break;
-//                 default:
-//                     free_var(arglist);
-//                     return make_error_pack(E_INVARG);
-//             }
-//             keys.push_back(key_index);            
-//         }
-//     } else {
-//         // We have to calculate what the likely keys are based on the targets.
-//         Var *names;
-//         for (int i = 1; i <= arglist.v.list[2].v.list[0].v.num; i++) {
-//             // If it's an object we'll use their aliases
-//             // if it's a string we can assume it's the string itself.
-//             std::vector<std::string> key_index;
-//             switch (arglist.v.list[2].v.list[i].type) {
-//                 case TYPE_STR:
-//                     key_index.push_back(std::string(arglist.v.list[2].v.list[i].v.str));
-//                     break;
-//                 // case TYPE_OBJ:
-//                 //     names = aliases(arglist.v.list[2].v.list[i].v.obj);
-//                 //     for (i = 0; i <= names[0].v.num; i++) {
-//                 //         if (i == 0)
-//                 //             key_index.push_back(db_object_name(arglist.v.list[2].v.list[i].v.obj));
-//                 //         else if (names[i].type != TYPE_STR)
-//                 //             continue;
-//                 //         else
-//                 //             key_index.push_back(std::string(names[i].v.str));
-//                 //     }
-//                 //     break;
-//                 case TYPE_LIST:
-//                     for (int x = 1; x <= arglist.v.list[2].v.list[i].v.list[0].v.num; x++) {
-//                         if (arglist.v.list[2].v.list[i].v.list[x].type != TYPE_STR) {
-//                             free_var(arglist);
-//                             return make_error_pack(E_INVARG);
-//                         }
-//                         key_index.push_back(std::string(arglist.v.list[2].v.list[i].v.list[x].v.str));
-//                     }
-//                     break;
-//                 default:
-//                     free_var(arglist);
-//                     return make_error_pack(E_INVARG);
-//             }
-//             keys.push_back(key_index);
-//         }
-//     }
+    if (arglist.v.list[0].v.num == 3) {
+        // There must be as many keys as there are targets.
+        if (arglist.v.list[3].v.list[0].v.num != arglist.v.list[2].v.list[0].v.num) {
+            free_var(arglist);
+            return make_error_pack(E_INVARG);
+        }
+        // Compile our keys...
+        for (int i = 1; i <= arglist.v.list[3].v.list[0].v.num; i++) {
+            // std::vector<std::string> key_index;
+            Var target_keys = new_list(0);
+            switch(arglist.v.list[3].v.list[i].type) {
+                case TYPE_STR:
+                    target_keys = listappend(target_keys, var_dup(arglist.v.list[3].v.list[i]));
+                    break;
+                case TYPE_LIST:
+                    // Someone in the future look at this and go 'what the fuck is actually happening here'
+                    // ..possibly me..
+                    // TL;DR we support lists of lists to alias one key result to multiple strings
+                    // meaning one index target can have multiple strings that will match to it
+                    // this lets things like .aliases work.
+                    for (int x = 1; x <= arglist.v.list[3].v.list[i].v.list[0].v.num; x++) {
+                        if (arglist.v.list[3].v.list[i].v.list[x].type != TYPE_STR) {
+                            free_var(arglist);
+                            return make_error_pack(E_INVARG);
+                        }
+                        target_keys = listappend(target_keys, var_dup(arglist.v.list[3].v.list[i].v.list[x]));
+                    }
+                    break;
+                default:
+                    free_var(arglist);
+                    return make_error_pack(E_INVARG);
+            }
+            keys = listappend(keys, var_ref(target_keys));
+        }
+    } else {
+        // We have to calculate what the likely keys are based on the targets.
+        Var *names;
+        for (int i = 1; i <= arglist.v.list[2].v.list[0].v.num; i++) {
+            // If it's an object we'll use their aliases
+            // if it's a string we can assume it's the string itself.
+            Var target_keys = new_list(0);
+            switch (arglist.v.list[2].v.list[i].type) {
+                case TYPE_STR:
+                    target_keys = listappend(target_keys, var_dup(arglist.v.list[2].v.list[i]));
+                    break;
+                case TYPE_OBJ:
+                    target_keys = name_and_aliases(NOTHING, arglist.v.list[2].v.list[i].v.obj);
+                    break;
+                case TYPE_LIST:
+                    for (int x = 1; x <= arglist.v.list[2].v.list[i].v.list[0].v.num; x++) {
+                        if (arglist.v.list[2].v.list[i].v.list[x].type != TYPE_STR) {
+                            free_var(arglist);
+                            return make_error_pack(E_INVARG);
+                        }
+                        target_keys = listappend(target_keys, var_dup(arglist.v.list[2].v.list[i].v.list[x]));
+                    }
+                    break;
+                default:
+                    free_var(arglist);
+                    return make_error_pack(E_INVARG);
+            }
+            keys = listappend(keys, var_ref(target_keys));
+        }
+    }
 
-//     // Now that we have our keys parsed out, the only thing left to do is run a match.
-//     std::vector<int> matches = complex_match(std::string(arglist.v.list[1].v.str), keys);
-//     Var r = new_list(matches.size());
-//     for (int i=0;i < matches.size();i++) {
-//         r.v.list[i + 1] = var_dup(arglist.v.list[2].v.list[i + 1]);
-//     }
-//     return make_var_pack(r);
-// }
+    // Now that we have our keys parsed out, the only thing left to do is run a match.
+    std::vector<int> matches = complex_match(str_dup(arglist.v.list[1].v.str), &keys);
+    Var r = new_list(matches.size());
+    for (int i=0;i < matches.size();i++) {
+        r.v.list[i + 1] = var_dup(arglist.v.list[2].v.list[i + 1]);
+    }
+    free_var(keys);
+    return make_var_pack(r);
+}
 
 static package
 bf_strsub(Var arglist, Byte next, void *vdata, Objid progr)
@@ -2006,7 +2000,7 @@ register_list(void)
     register_function("match", 2, 3, bf_match, TYPE_STR, TYPE_STR, TYPE_ANY);
     register_function("rmatch", 2, 3, bf_rmatch, TYPE_STR, TYPE_STR, TYPE_ANY);
     register_function("substitute", 2, 2, bf_substitute, TYPE_STR, TYPE_LIST);
-    // register_function("complex_match", 2, 3, bf_complex_match, TYPE_STR, TYPE_LIST, TYPE_LIST);
+    register_function("complex_match", 2, 3, bf_complex_match, TYPE_STR, TYPE_LIST, TYPE_LIST);
     register_function("index", 2, 4, bf_index,
                       TYPE_STR, TYPE_STR, TYPE_ANY, TYPE_INT);
     register_function("rindex", 2, 4, bf_rindex,

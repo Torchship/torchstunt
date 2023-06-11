@@ -19,5 +19,6 @@
 #include "structures.h"
 #include <vector>
 
+extern Var name_and_aliases(Objid player, Objid oid);
 extern Objid match_object(Objid player, const char *name);
 extern std::vector<int> complex_match(const char* subject, Var* targets);
