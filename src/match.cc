@@ -61,21 +61,21 @@ name_and_aliases(Objid player, Objid oid)
     args.v.list[1] = Var::new_obj(oid);
 
     Var name;
-    if (run_server_task(player, sysobj, "_name_of", var_dup(args), "", &name) == OUTCOME_DONE && name.type == TYPE_STR) {        
-        std::vector<std::string> unionVector;
-        boost::range::set_union(results, var_to_vector(name), std::back_inserter(unionVector));
-        results = unionVector;
-        free_var(name);
-    } else {
+    // if (run_server_task(player, sysobj, "_name_of", var_dup(args), "", &name) == OUTCOME_DONE && name.type == TYPE_STR) {        
+    //     std::vector<std::string> unionVector;
+    //     boost::range::set_union(results, var_to_vector(name), std::back_inserter(unionVector));
+    //     results = unionVector;
+    //     free_var(name);
+    // } else {
         results.push_back(db_object_name(oid));
-    }
+    // }
 
     Var aliases;
-    if (run_server_task(player, sysobj, "_aliases_of", var_dup(args), "", &aliases) == OUTCOME_DONE && aliases.type == TYPE_LIST) {
-        std::vector<std::string> unionVector;
-        boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
-        results = unionVector;
-    } else {
+    // if (run_server_task(player, sysobj, "_aliases_of", var_dup(args), "", &aliases) == OUTCOME_DONE && aliases.type == TYPE_LIST) {
+    //     std::vector<std::string> unionVector;
+    //     boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
+    //     results = unionVector;
+    // } else {
         db_prop_handle h;
         h = db_find_property(Var::new_obj(oid), "aliases", &aliases);
         if (!h.ptr || aliases.type != TYPE_LIST) {
@@ -85,7 +85,7 @@ name_and_aliases(Objid player, Objid oid)
             boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
             results = unionVector;
         }
-    }
+    // }
 
     return results;
 }
