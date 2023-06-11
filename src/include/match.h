@@ -20,5 +20,4 @@
 #include <vector>
 
 extern Objid match_object(Objid player, const char *name);
-extern Var * aliases(Objid oid);
-extern std::vector<int> complex_match(std::string subject, std::vector<std::vector<std::string>> targets);
+extern std::vector<int> complex_match(const char* subject, Var* targets);

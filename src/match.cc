@@ -34,77 +34,42 @@
 #include "tasks.h"
 #include "list.h"
 
-std::vector<std::string>
-var_to_vector(Var v) 
-{
-    std::vector<std::string> results;
-    switch (v.type) {
-        case TYPE_LIST:
-            for (int i=1; i <= v.v.list[0].v.num;i++) {
-                if (v.v.list[i].type != TYPE_STR) continue;
-                results.push_back(std::string(v.v.list[i].v.str));
-            }
-            break;
-        case TYPE_STR:
-            results.push_back(std::string(v.v.str));
-            break;
-    }
-    return results;
-}
-
-std::vector<std::string>
+Var
 name_and_aliases(Objid player, Objid oid)
 {
-    std::vector<std::string> results;
+    // std::vector<std::string> results;
+    Var results = new_list(1);
     Var sysobj = Var::new_obj(SYSTEM_OBJECT);
     Var args = new_list(1);
     args.v.list[1] = Var::new_obj(oid);
-
-    Var name;
-    // if (run_server_task(player, sysobj, "_name_of", var_dup(args), "", &name) == OUTCOME_DONE && name.type == TYPE_STR) {        
-    //     std::vector<std::string> unionVector;
-    //     boost::range::set_union(results, var_to_vector(name), std::back_inserter(unionVector));
-    //     results = unionVector;
-    //     free_var(name);
-    // } else {
-        results.push_back(db_object_name(oid));
-    // }
+    results.v.list[1] = str_dup_to_var(db_object_name(oid));
 
     Var aliases;
-    // if (run_server_task(player, sysobj, "_aliases_of", var_dup(args), "", &aliases) == OUTCOME_DONE && aliases.type == TYPE_LIST) {
-    //     std::vector<std::string> unionVector;
-    //     boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
-    //     results = unionVector;
-    // } else {
-        db_prop_handle h;
-        h = db_find_property(Var::new_obj(oid), "aliases", &aliases);
-        if (!h.ptr || aliases.type != TYPE_LIST) {
-            // Do nothing it was an empty list.
-        } else {
-            std::vector<std::string> unionVector;
-            boost::range::set_union(results, var_to_vector(aliases), std::back_inserter(unionVector));
-            results = unionVector;
-        }
-    // }
+    db_prop_handle h;
+    h = db_find_property(Var::new_obj(oid), "aliases", &aliases);
+    if (!h.ptr || aliases.type != TYPE_LIST) {
+        // Do nothing it was an empty list.
+    } else {
+        results = listconcat(var_ref(results), var_ref(aliases));
+    }
 
     return results;
 }
 
 struct match_data {
-    const char *name;
     Objid player;
-    std::vector<Objid> targets;
-    std::vector<std::vector<std::string>> keys;
+    Var targets;
+    Var keys;
 };
 
 static int
 match_proc(void *data, Objid oid)
 {
     struct match_data *d = (struct match_data *)data;
-    std::vector<std::string> keys = name_and_aliases(d->player, oid);
+    Var keys = name_and_aliases(d->player, oid);
 
-    d->targets.push_back(oid);
-    d->keys.push_back(keys);
+    d->targets = listappend(d->targets, Var::new_obj(oid));
+    d->keys = listappend(d->keys, var_ref(keys));
 
     return 0;
 }
@@ -132,7 +97,7 @@ match_object(Objid player, const char *name)
     int step;
     Objid oid;
     Objid loc = db_object_location(player);
-    struct match_data d;
+    struct match_data d = {player, new_list(0), new_list(0)};
     d.player = player;
     for (oid = player, step = 0; step < 2; oid = loc, step++) {
         if (!valid(oid))
@@ -140,12 +105,17 @@ match_object(Objid player, const char *name)
         db_for_all_contents(oid, match_proc, &d);
     }
 
-    const std::vector<int> matches = complex_match(name, d.keys);
-    if (matches.size() <= 0)
-      return FAILED_MATCH;
-    if (matches.size() == 1)
-      return d.targets[matches.back()];
-    return AMBIGUOUS;
+    const std::vector<int> matches = complex_match(name, &d.keys);
+    Objid result = AMBIGUOUS;
+    if (matches.size() <= 0) {
+        result = FAILED_MATCH;
+    } else if (matches.size() == 1) {
+        result = d.targets.v.list[matches.back()].v.obj;
+    }
+    
+    free_var(d.keys);
+    free_var(d.targets);
+    return result;
 }
 
 int findOrdinalIndex(const std::string& str, const std::vector<std::vector<std::string>>& ordinals) {
@@ -230,33 +200,45 @@ parse_ordinal(std::string word) {
 #include "log.h"
 
 std::vector<int>
-complex_match(std::string subject, std::vector<std::vector<std::string>> targets) {
-    std::vector<std::string> subjectWords;
-    boost::split(subjectWords, subject, boost::is_any_of(" "));
+complex_match(const char* inputSubject, Var *targets) {
+    // Guard check for no targets
+    if (targets->v.list[0].v.num <= 0) return {};
+
+    Var subjectWords = new_list(0);
+    char *found, *return_string;
+    return_string = strdup(inputSubject);
+    while ((found = strsep(&return_string, " ")) != nullptr)
+        subjectWords = listappend(subjectWords, str_dup_to_var(found));
     
     // Guard check for no subject
-    if (subjectWords.size() <= 0) return {};
-    // Guard check for no targets
-    if (targets.size() <= 0) return {};
+    if (subjectWords.v.list[0].v.num <= 0) return {};
 
     // Ordinal matches 
-    int ordinal = parse_ordinal(subjectWords[0]);
-    if (ordinal <= 0) ordinal = 0; // Safety in case ordinal didn't match
-    else {
-        subjectWords.erase(subjectWords.begin());
-        if (subjectWords.size() <= 0) return {};
-        subject = boost::algorithm::join(subjectWords, " ");
+    int ordinal = parse_ordinal(str_dup(subjectWords.v.list[1].v.str));
+    const char* subject = str_dup(inputSubject);
+    if (ordinal <= 0)  {
+        // Safety in case ordinal didn't match
+        ordinal = 0; 
+    } else {
+        subjectWords = listdelete(subjectWords, 1);
+        if (subjectWords.v.list[0].v.num <= 0) return {};
+        // subject = boost::algorithm::join(subjectWords, " ");
+        Stream* s = new_stream(100);
+        for (int i=1; i <= subjectWords.v.list[0].v.num; i++) {
+            stream_add_string(s, subjectWords.v.list[i].v.str);
+        }
+        subject = stream_contents(s);
+        free_stream(s);
     }
     
     std::vector<int> exactMatches, startMatches, containMatches;
     
-    for(int i = 0; i < targets.size(); i++) {
-        std::string lowerSubject = boost::algorithm::to_lower_copy(subject);
-        for (const std::string& alias : targets[i]) {
-            std::string lowerAlias = boost::algorithm::to_lower_copy(alias);
+    for(int i = 1; i <= targets->v.list[0].v.num; i++) {
+        for(int i2 = 1 ; i2 <= targets->v.list[i].v.list[0].v.num; i2++) {
+            const char* alias = targets->v.list[i].v.list[i2].v.str;
             
             bool found_match = false;
-            if(lowerSubject == lowerAlias) {
+            if(strcasecmp(subject, alias)) {
                 if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
                     return {i};
                 }
@@ -264,12 +246,12 @@ complex_match(std::string subject, std::vector<std::vector<std::string>> targets
                 found_match = true;
             } 
             
-            if(boost::algorithm::starts_with(lowerAlias, lowerSubject)) {
+            if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) == 1) {
                 startMatches.push_back(i);
                 found_match = true;
             }
             
-            if(boost::algorithm::contains(lowerAlias, lowerSubject)) {
+            if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) > 1) {
                 containMatches.push_back(i);
                 found_match = true;
             }
