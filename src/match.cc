@@ -238,7 +238,7 @@ complex_match(const char* inputSubject, Var *targets) {
             const char* alias = targets->v.list[i].v.list[i2].v.str;
             
             bool found_match = false;
-            if(strcasecmp(subject, alias)) {
+            if(!strcasecmp(subject, alias)) {
                 if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
                     return {i};
                 }
