@@ -37,11 +37,7 @@
 Var
 name_and_aliases(Objid player, Objid oid)
 {
-    // std::vector<std::string> results;
     Var results = new_list(1);
-    Var sysobj = Var::new_obj(SYSTEM_OBJECT);
-    Var args = new_list(1);
-    args.v.list[1] = Var::new_obj(oid);
     results.v.list[1] = str_dup_to_var(db_object_name(oid));
 
     Var aliases;
@@ -118,10 +114,12 @@ match_object(Objid player, const char *name)
     return result;
 }
 
-int findOrdinalIndex(const std::string& str, const std::vector<std::vector<std::string>>& ordinals) {
-    for (size_t i = 0; i < ordinals.size(); ++i) {
-        for (const auto& ordinal : ordinals[i]) {
-            if (boost::algorithm::iequals(str, ordinal)) {
+#define NUM_ORDINALS 19
+#define MAX_ORDINAL_STRINGS 4
+int findOrdinalIndex(const char* str, const char* ordinals[NUM_ORDINALS][MAX_ORDINAL_STRINGS]) {
+    for (int i = 0; i < NUM_ORDINALS; ++i) {
+        for (int j = 0; ordinals[i][j] != NULL; ++j) {
+            if (!strcasecmp(str, ordinals[i][j])) {
                 return i;
             }
         }
@@ -130,74 +128,86 @@ int findOrdinalIndex(const std::string& str, const std::vector<std::vector<std::
 }
 
 int
-parse_ordinal(std::string word) {
-    const std::regex e ("(\\d+)(th|st|nd|rd)");
-    const std::vector<std::vector<std::string>> ordinals = {
-        {"first"},
-        {"second", "twenty", "twentieth"},
-        {"third", "thirty", "thirtieth"},
-        {"fourth", "fourtieth", "fourty"},
-        {"fifth", "fiftieth", "fifty"},
-        {"sixth", "sixtieth", "sixty"},
-        {"seventh", "seventieth", "seventy"},
-        {"eighth", "eightieth", "eighty"},
-        {"ninth", "ninetieth", "ninty"},
-        {"tenth"},
-        {"eleventh"},
-        {"twelth"},
-        {"thirteenth"},
-        {"fourteenth"},
-        {"fifteenth"},
-        {"sixteenth"},
-        {"seventeeth"},
-        {"eighteenth"},
-        {"nineteenth"}
+parse_ordinal(const char* word) {
+    // const std::regex e ("(\\d+)(th|st|nd|rd)");
+    const char* ordinals[NUM_ORDINALS][MAX_ORDINAL_STRINGS] = {
+        {"first", NULL},
+        {"second", "twenty", "twentieth", NULL},
+        {"third", "thirty", "thirtieth", NULL},
+        {"fourth", "fourtieth", "fourty", NULL},
+        {"fifth", "fiftieth", "fifty", NULL},
+        {"sixth", "sixtieth", "sixty", NULL},
+        {"seventh", "seventieth", "seventy", NULL},
+        {"eighth", "eightieth", "eighty", NULL},
+        {"ninth", "ninetieth", "ninty", NULL},
+        {"tenth", NULL},
+        {"eleventh", NULL},
+        {"twelth", NULL},
+        {"thirteenth", NULL},
+        {"fourteenth", NULL},
+        {"fifteenth", NULL},
+        {"sixteenth", NULL},
+        {"seventeeth", NULL},
+        {"eighteenth", NULL},
+        {"nineteenth", NULL}
     };
-    std::vector<std::string> tokens;
-    word = boost::algorithm::to_lower_copy(word);
-    boost::split(tokens, word, boost::is_any_of("-"));
-    if (tokens.size() > 2) return FAILED_MATCH; // Error, no idea what this is.
+    // First order of operations is to split up the ordinal into tokens.
+    Var tokens = new_list(0);
+    char *found, *return_string;
+    return_string = strdup(word);
+    while ((found = strsep(&return_string, "-")) != nullptr)
+        tokens = listappend(tokens, str_dup_to_var(found));
+
     std::vector<int> ordinalTokens;
-    for (const std::string &token : tokens) {
+    for (int i=1;i <= tokens.v.list[0].v.num;i++) {
         // Easiest matching: 1. 2. etc.
-        if (token.back() == '.') {
+        Var token = tokens.v.list[i];
+
+        if (memo_strlen(token.v.str) > 1 && token.v.str[memo_strlen(token.v.str) - 1] == '.') {
             try {
-                ordinalTokens.push_back(std::stoi(token.substr(0, token.size() - 1)));
+                ordinalTokens.push_back(atoi(strndup(token.v.str, memo_strlen(token.v.str) - 2)));
             } catch (...) {
+                free_var(tokens);
+                free(return_string);
                 return FAILED_MATCH;
             }
         }
 
         // Brute force ordinal matching
-        int ordinalIndex = findOrdinalIndex(token, ordinals);
+        int ordinalIndex = findOrdinalIndex(str_dup(token.v.str), ordinals);
         if (ordinalIndex != -1) {
             ordinalTokens.push_back(ordinalIndex + 1);
             continue;
         }
         
         // Third order matching, try matching 1st, etc.
-        std::smatch sm;
-        if (std::regex_search(token, sm, e) && sm.size() > 1) {
-            try {
-                ordinalTokens.push_back(std::stoi(sm.str(1)));
-            } catch (...) {
-                return FAILED_MATCH;
-            }
-        }
+        // std::smatch sm;
+        // if (std::regex_search(token, sm, e) && sm.size() > 1) {
+        //     try {
+        //         ordinalTokens.push_back(std::stoi(sm.str(1)));
+        //     } catch (...) {
+        //         free_var(tokens);
+        //         return FAILED_MATCH;
+        //     }
+        // }
     }
 
     int ordinal;
-    if (ordinalTokens.size() == 1)
+    if (ordinalTokens.size() == 1) {
+        free_var(tokens);
+        free(return_string);
         return ordinalTokens[0];
-    else if (ordinalTokens.size() == 2) {
+    } else if (ordinalTokens.size() == 2) {
         ordinal = ordinalTokens[0] * 10;
         ordinal = ordinal + ordinalTokens[1];
+        free_var(tokens);
+        free(return_string);
         return ordinal;
     }
+    free_var(tokens);
+    free(return_string);
     return FAILED_MATCH;
 }
-
-#include "log.h"
 
 std::vector<int>
 complex_match(const char* inputSubject, Var *targets) {
@@ -211,7 +221,11 @@ complex_match(const char* inputSubject, Var *targets) {
         subjectWords = listappend(subjectWords, str_dup_to_var(found));
     
     // Guard check for no subject
-    if (subjectWords.v.list[0].v.num <= 0) return {};
+    if (subjectWords.v.list[0].v.num <= 0) {
+        free_var(subjectWords);
+        free(return_string);
+        return {};
+    }
 
     // Ordinal matches 
     int ordinal = parse_ordinal(str_dup(subjectWords.v.list[1].v.str));
@@ -231,6 +245,10 @@ complex_match(const char* inputSubject, Var *targets) {
         subject = str_dup(stream_contents(s));
         free_stream(s);
     }
+
+    // Clear up this since we don't need it anymore...
+    free_var(subjectWords);
+    free(return_string);
     
     std::vector<int> exactMatches, startMatches, containMatches;
     
