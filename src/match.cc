@@ -46,9 +46,8 @@ name_and_aliases(Objid player, Objid oid)
     if (!h.ptr || aliases.type != TYPE_LIST) {
         // Do nothing it was an empty list.
     } else {
-        results = listconcat(var_ref(results), var_ref(aliases));
+        results = listconcat(results, var_ref(aliases));
     }
-
     return results;
 }
 
@@ -62,10 +61,9 @@ static int
 match_proc(void *data, Objid oid)
 {
     struct match_data *d = (struct match_data *)data;
-    Var keys = name_and_aliases(d->player, oid);
 
     d->targets = listappend(d->targets, Var::new_obj(oid));
-    d->keys = listappend(d->keys, var_ref(keys));
+    d->keys = listappend(d->keys, name_and_aliases(d->player, oid));
 
     return 0;
 }
@@ -100,8 +98,8 @@ match_object(Objid player, const char *name)
             continue;
         db_for_all_contents(oid, match_proc, &d);
     }
-
-    const std::vector<int> matches = complex_match(name, &d.keys);
+    
+    std::vector<int> matches = complex_match(name, &d.keys);
     Objid result = AMBIGUOUS;
     if (matches.size() <= 0) {
         result = FAILED_MATCH;
@@ -127,36 +125,41 @@ int findOrdinalIndex(const char* str, const char* ordinals[NUM_ORDINALS][MAX_ORD
     return -1;  // Return -1 if no match is found
 }
 
+const char* ordinals[NUM_ORDINALS][MAX_ORDINAL_STRINGS] = {
+    {"first", NULL},
+    {"second", "twenty", "twentieth", NULL},
+    {"third", "thirty", "thirtieth", NULL},
+    {"fourth", "fourtieth", "fourty", NULL},
+    {"fifth", "fiftieth", "fifty", NULL},
+    {"sixth", "sixtieth", "sixty", NULL},
+    {"seventh", "seventieth", "seventy", NULL},
+    {"eighth", "eightieth", "eighty", NULL},
+    {"ninth", "ninetieth", "ninty", NULL},
+    {"tenth", NULL},
+    {"eleventh", NULL},
+    {"twelth", NULL},
+    {"thirteenth", NULL},
+    {"fourteenth", NULL},
+    {"fifteenth", NULL},
+    {"sixteenth", NULL},
+    {"seventeeth", NULL},
+    {"eighteenth", NULL},
+    {"nineteenth", NULL}
+};
+
 int
 parse_ordinal(const char* word) {
     // const std::regex e ("(\\d+)(th|st|nd|rd)");
-    const char* ordinals[NUM_ORDINALS][MAX_ORDINAL_STRINGS] = {
-        {"first", NULL},
-        {"second", "twenty", "twentieth", NULL},
-        {"third", "thirty", "thirtieth", NULL},
-        {"fourth", "fourtieth", "fourty", NULL},
-        {"fifth", "fiftieth", "fifty", NULL},
-        {"sixth", "sixtieth", "sixty", NULL},
-        {"seventh", "seventieth", "seventy", NULL},
-        {"eighth", "eightieth", "eighty", NULL},
-        {"ninth", "ninetieth", "ninty", NULL},
-        {"tenth", NULL},
-        {"eleventh", NULL},
-        {"twelth", NULL},
-        {"thirteenth", NULL},
-        {"fourteenth", NULL},
-        {"fifteenth", NULL},
-        {"sixteenth", NULL},
-        {"seventeeth", NULL},
-        {"eighteenth", NULL},
-        {"nineteenth", NULL}
-    };
+
     // First order of operations is to split up the ordinal into tokens.
     Var tokens = new_list(0);
-    char *found, *return_string;
-    return_string = strdup(word);
-    while ((found = strsep(&return_string, "-")) != nullptr)
+    char *found, *return_string, *freeme;
+    freeme = return_string = strdup(word);
+    found = strtok(return_string, "-");
+    while (found != nullptr) {
         tokens = listappend(tokens, str_dup_to_var(found));
+        found = strtok(nullptr, "-");
+    }
 
     std::vector<int> ordinalTokens;
     for (int i=1;i <= tokens.v.list[0].v.num;i++) {
@@ -168,13 +171,13 @@ parse_ordinal(const char* word) {
                 ordinalTokens.push_back(atoi(strndup(token.v.str, memo_strlen(token.v.str) - 2)));
             } catch (...) {
                 free_var(tokens);
-                free(return_string);
+                free(freeme);
                 return FAILED_MATCH;
             }
         }
 
         // Brute force ordinal matching
-        int ordinalIndex = findOrdinalIndex(str_dup(token.v.str), ordinals);
+        int ordinalIndex = findOrdinalIndex(token.v.str, ordinals);
         if (ordinalIndex != -1) {
             ordinalTokens.push_back(ordinalIndex + 1);
             continue;
@@ -195,17 +198,17 @@ parse_ordinal(const char* word) {
     int ordinal;
     if (ordinalTokens.size() == 1) {
         free_var(tokens);
-        free(return_string);
+        free(freeme);
         return ordinalTokens[0];
     } else if (ordinalTokens.size() == 2) {
         ordinal = ordinalTokens[0] * 10;
         ordinal = ordinal + ordinalTokens[1];
         free_var(tokens);
-        free(return_string);
+        free(freeme);
         return ordinal;
     }
     free_var(tokens);
-    free(return_string);
+    free(freeme);
     return FAILED_MATCH;
 }
 
@@ -215,20 +218,22 @@ complex_match(const char* inputSubject, Var *targets) {
     if (targets->v.list[0].v.num <= 0) return {};
 
     Var subjectWords = new_list(0);
-    char *found, *return_string;
-    return_string = strdup(inputSubject);
-    while ((found = strsep(&return_string, " ")) != nullptr)
+    char *found, *return_string, *freeme;
+    freeme = return_string = strdup(inputSubject);
+    found = strtok(return_string, " ");
+    while (found != nullptr) {
         subjectWords = listappend(subjectWords, str_dup_to_var(found));
-    
+        found = strtok(nullptr, " ");
+    }
     // Guard check for no subject
     if (subjectWords.v.list[0].v.num <= 0) {
         free_var(subjectWords);
-        free(return_string);
+        free(freeme);
         return {};
     }
 
     // Ordinal matches 
-    int ordinal = parse_ordinal(str_dup(subjectWords.v.list[1].v.str));
+    int ordinal = parse_ordinal(subjectWords.v.list[1].v.str);
     const char* subject = str_dup(inputSubject);
     if (ordinal <= 0)  {
         // Safety in case ordinal didn't match
@@ -248,7 +253,7 @@ complex_match(const char* inputSubject, Var *targets) {
 
     // Clear up this since we don't need it anymore...
     free_var(subjectWords);
-    free(return_string);
+    free(freeme);
     
     std::vector<int> exactMatches, startMatches, containMatches;
     
