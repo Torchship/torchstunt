@@ -19,9 +19,6 @@
 #include <string.h>
 #include <vector>
 #include <regex>
-#include <boost/algorithm/string.hpp>
-#include <boost/range/algorithm.hpp>
-#include <boost/range/adaptors.hpp>
 
 #include "config.h"
 #include "db.h"
@@ -149,7 +146,7 @@ const char* ordinals[NUM_ORDINALS][MAX_ORDINAL_STRINGS] = {
 
 int
 parse_ordinal(const char* word) {
-    // const std::regex e ("(\\d+)(th|st|nd|rd)");
+    const std::regex e ("(\\d+)(th|st|nd|rd)");
 
     // First order of operations is to split up the ordinal into tokens.
     Var tokens = new_list(0);
@@ -184,15 +181,17 @@ parse_ordinal(const char* word) {
         }
         
         // Third order matching, try matching 1st, etc.
-        // std::smatch sm;
-        // if (std::regex_search(token, sm, e) && sm.size() > 1) {
-        //     try {
-        //         ordinalTokens.push_back(std::stoi(sm.str(1)));
-        //     } catch (...) {
-        //         free_var(tokens);
-        //         return FAILED_MATCH;
-        //     }
-        // }
+        std::smatch sm;
+        std::string str(token.v.str);
+        if (std::regex_search(str, sm, e) && sm.size() > 1) {
+            try {
+                ordinalTokens.push_back(std::stoi(sm.str(1)));
+            } catch (...) {
+                free_var(tokens);
+                free(freeme);
+                return FAILED_MATCH;
+            }
+        }
     }
 
     int ordinal;
