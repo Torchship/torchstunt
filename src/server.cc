@@ -3303,7 +3303,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     Objid subject = NOTHING;
     Objid match = NOTHING;
     for (int i = 0; i < input_length; i++) {
-        const char c = input_string[i]; // Current character
+        char c = input_string[i]; // Current character
         // Top level is our MODE
         if (token->operation == token_op::SPEECH) {
             // Speech mode is fairly closed loop and simple. We're just
@@ -3377,14 +3377,49 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         } else if (stream_cmp(token->prefix, "%")) {
             token->operation = token_op::SUBSTITUTION;
             reset_stream(token->prefix);
-        } else if (std::isupper(stream_first_char(token->content)) && stream_length(token->content) > 3 && valid(match = match_object(speaker, stream_contents(token->content)))) {
+        } else if (std::isupper(stream_first_char(token->content)) 
+            && stream_length(token->content) > 3 
+            && valid(match = match_object(speaker, stream_contents(token->content)))) {
             // If we match this we found something in the local area that matches.
             subject = match;
             token->operation = token_op::TARGET;
+            // we're going to aggressively match forward now for multi-word matches...
+            if (c == ' ') {
+                Objid read_ahead_match = match;
+                while (valid(read_ahead_match)) {
+                    // Sorry to anyone who has to ever read this code again.
+                    Stream *read_ahead = new_stream(100);
+                    stream_add_string(read_ahead, stream_contents(token->content));
+                    stream_add_char(read_ahead, c);
+                    int ri = i + 1;
+                    for (ri; ri < input_length; ri++) {
+                        const char rc = input_string[ri];
+                        if (rc == ' ') {
+                            read_ahead_match = match_object(speaker, stream_contents(read_ahead));
+                            stream_add_char(read_ahead, rc);
+                            break;
+                        } else if (std::ispunct(rc)) {
+                            ri--;
+                            break;
+                        }
+                        stream_add_char(read_ahead, rc);
+                    }
+                    if (ri == i) break;
+                    if (ri == input_length) read_ahead_match = match_object(speaker, stream_contents(read_ahead));
+                    if (valid(read_ahead_match)) {
+                        // Move the cursor ahead.
+                        i = ri + 1;
+                        c = input_string[i];
+                        reset_stream(token->content);
+                        stream_add_string(token->content, stream_contents(read_ahead));
+                    }
+                    free_stream(read_ahead);
+                }
+            }
             if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
-              token->operation = token_op::POSSESSIVE_TARGET;
-              stream_delete_char(token->postfix); // This clear's the possessive from the buffer.
-              ++i; // This will clear the oncoming s.
+                token->operation = token_op::POSSESSIVE_TARGET;
+                if (stream_length(token->postfix) > 0) stream_delete_char(token->postfix); // This clear's the possessive from the buffer.
+                ++i; // This will clear the oncoming s.
             }
             token->target = subject;
         } else if (stream_length(token->prefix) != 0 && stream_last_char(token->prefix) == '/') {
