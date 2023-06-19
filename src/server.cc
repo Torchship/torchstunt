@@ -3443,9 +3443,20 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         if (is_space) {
             stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
-        } else if (token->operation != token_op::TEXT) {
-            COMMIT_AND_ADD(tokens, token);
         } else if (stream_length(token->postfix) != 0 && std::ispunct(stream_last_char(token->postfix))) {
+            // aggressive read ahead to catch any other useless characters...
+            int ri = i + 1;
+            for (ri; ri < input_length; ri++) {
+                c = input_string[ri];
+                if (!std::isspace(c) && !std::ispunct(c)) {
+                    i = ri - 1;
+                    break;
+                } else if (c == '/' || c == '%' || c == '.') {
+                    i = ri - 1;
+                    break;
+                }
+                stream_add_char(token->postfix, c);
+            }
             COMMIT_AND_ADD(tokens, token);
         }
     }
