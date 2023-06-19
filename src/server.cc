@@ -3422,6 +3422,8 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 ++i; // This will clear the oncoming s.
             }
             token->target = subject;
+            COMMIT_AND_ADD(tokens, token);
+            continue;
         } else if (stream_length(token->prefix) != 0 && stream_last_char(token->prefix) == '/') {
             // This is probably a macro.
             token->operation = token_op::MACRO;
