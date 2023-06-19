@@ -3451,7 +3451,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 if (!std::isspace(c) && !std::ispunct(c)) {
                     i = ri - 1;
                     break;
-                } else if (c == '/' || c == '%' || c == '.') {
+                } else if (c == '/' || c == '%' || c == '.' || c == "\"") {
                     i = ri - 1;
                     break;
                 }
