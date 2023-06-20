@@ -3384,6 +3384,11 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             stream_delete_char(token->prefix);
             token->operation = token_op::TARGET;
             token->target = subject;
+            if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
+                token->operation = token_op::POSSESSIVE_TARGET;
+                if (stream_length(token->postfix) > 0) stream_delete_char(token->postfix); // This clear's the possessive from the buffer.
+                ++i; // This will clear the oncoming s.
+            }
             if (c == ' ') stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
             continue;
