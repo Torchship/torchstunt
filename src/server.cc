@@ -3377,6 +3377,16 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         } else if (stream_cmp(token->prefix, "%")) {
             token->operation = token_op::SUBSTITUTION;
             reset_stream(token->prefix);
+        } else if (stream_cmp(token->prefix, "#") && atoi(stream_contents(token->content)) != 0) {
+            // We'll always resolve #OBJs into targets
+            Objid match = atoi(stream_contents(token->content));
+            subject = match;
+            stream_delete_char(token->prefix);
+            token->operation = token_op::TARGET;
+            token->target = subject;
+            if (c == ' ') stream_add_char(token->postfix, c);
+            COMMIT_AND_ADD(tokens, token);
+            continue;
         } else if (std::isupper(stream_first_char(token->content)) 
             && stream_length(token->content) > 3 
             && valid(match = match_object(speaker, stream_contents(token->content)))) {
