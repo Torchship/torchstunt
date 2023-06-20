@@ -3302,8 +3302,9 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     InputToken* token = new_token(token_op::TEXT); // our current token    
     Objid subject = NOTHING;
     Objid match = NOTHING;
-    for (int i = 0; i < input_length; i++) {
-        char c = input_string[i]; // Current character
+    for (int i = 0; i <= input_length; i++) {
+        // I do <= to input length so I don't have to do a cleanup stage of the parser.
+        char c = i == input_length ? '\0' : input_string[i]; // Current character
         // Top level is our MODE
         if (token->operation == token_op::SPEECH) {
             // Speech mode is fairly closed loop and simple. We're just
@@ -3334,7 +3335,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         //
         // EXAMPLE: .look => prefix '.', word 'look'
         // EXAMPLE: Foo, => word 'Foo', postfix ','
-        if (!is_space && !is_punct) {
+        if (c != '\0' && !is_space && !is_punct) {
             // In TEXT mode any alphanumeric character just gets added to content.
             stream_add_char(token->content, c);
             continue;
@@ -3342,7 +3343,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
 
         // ATTENTION: We need to add punctuation to prefix/postfix BEFORE processing
         // Because that's how some of the special functions match!!!
-        if (is_punct) {
+        if (c != '\0' && is_punct) {
             if (token->empty()) {
                 stream_add_char(token->prefix, c);
                 continue;
@@ -3356,7 +3357,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             }
         }
 
-        if (token->empty()) {
+        if (c != '\0' && token->empty()) {
             // Optimization guard check
             stream_add_char(token->prefix, c);
             continue;
@@ -3382,6 +3383,8 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             Objid match = atoi(stream_contents(token->content));
             subject = match;
             stream_delete_char(token->prefix);
+            reset_stream(token->content);
+            stream_add_string(token->content, str_dup(db_object_name(match)));
             token->operation = token_op::TARGET;
             token->target = subject;
             if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
@@ -3458,7 +3461,9 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         // Finally if we're at a space character or a non-text operation we separate
         // into a new token.
         // This is done mostly for convenience as it lets us nom word by word and is readable.
-        if (is_space) {
+        if (c == '\0') {
+            COMMIT_AND_ADD(tokens, token);
+        } else if (is_space) {
             stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
         } else if (stream_length(token->postfix) != 0 && std::ispunct(stream_last_char(token->postfix))) {
@@ -3478,8 +3483,6 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             COMMIT_AND_ADD(tokens, token);
         }
     }
-
-    if (!token->totally_empty()) COMMIT_AND_ADD(tokens, token);
 
     // This is an optimization pass.
     // Essentially every text token can fall into the previous text token
