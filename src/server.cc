@@ -3378,9 +3378,9 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         } else if (stream_cmp(token->prefix, "%")) {
             token->operation = token_op::SUBSTITUTION;
             reset_stream(token->prefix);
-        } else if (stream_cmp(token->prefix, "#") && atoi(stream_contents(token->content)) != 0) {
+        } else if (stream_cmp(token->prefix, "#") && atoi(str_dup(stream_contents(token->content))) > 0) {
             // We'll always resolve #OBJs into targets
-            Objid match = atoi(stream_contents(token->content));
+            Objid match = atoi(str_dup(stream_contents(token->content)));
             subject = match;
             stream_delete_char(token->prefix);
             reset_stream(token->content);
