@@ -44,6 +44,7 @@ extern int listforeach(Var list, listfunc func, void *data);
 extern Var strrangeset(Var list, int from, int to, Var value);
 extern Var substr(Var str, int lower, int upper);
 extern Var strget(Var str, int i);
+extern Var compile_keys(Var *targets);
 
 extern const char *value2str(Var);
 extern void unparse_value(Stream *, Var);

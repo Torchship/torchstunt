@@ -1306,7 +1306,7 @@ bf_pluralize(Var arglist, Byte next, void *vdata, Objid progr)
 }
 
 
-static Var
+Var
 compile_keys(Var *targets)
 {
     Var keys = new_list(0);

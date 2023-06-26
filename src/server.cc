@@ -3291,7 +3291,36 @@ struct TokenCleaner {
 
 static package
 bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
-{
+{ /* (player, pose [, targets [, keys]]) */
+
+    Var target_keys, keys;
+    if (arglist.v.list[0].v.num >= 3) {
+        // All targets must be OBJs
+        for (int i=1;i <= arglist.v.list[3].v.list[0].v.num;i++) {
+            if (arglist.v.list[3].v.list[i].type != TYPE_OBJ) {
+                free_var(arglist);
+                return make_error_pack(E_INVARG);
+            }
+        }
+
+        // Check quantities for keys.
+        if (arglist.v.list[0].v.num == 4) {
+            // There must be as many keys as there are targets.
+            if (arglist.v.list[4].v.list[0].v.num != arglist.v.list[3].v.list[0].v.num) {
+                free_var(arglist);
+                return make_error_pack(E_INVARG);
+            }
+        }
+
+        target_keys = arglist.v.list[0].v.num == 4 ? arglist.v.list[4] : arglist.v.list[3];
+        keys = compile_keys(&target_keys);
+        if (keys.v.list[0].v.num <= 0) {
+            free_var(arglist);
+            free_var(keys);
+            return make_error_pack(E_INVARG);
+        }
+    }
+
     int nargs = arglist.v.list[0].v.num;
     Objid speaker = nargs >= 1 ? arglist.v.list[1].v.obj : 0;
     const char* input_string = nargs >= 2 ? arglist.v.list[2].v.str : "";
@@ -3302,6 +3331,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
     InputToken* token = new_token(token_op::TEXT); // our current token    
     Objid subject = NOTHING;
     Objid match = NOTHING;
+    std::vector<int> matches;
     for (int i = 0; i <= input_length; i++) {
         // I do <= to input length so I don't have to do a cleanup stage of the parser.
         char c = i == input_length ? '\0' : input_string[i]; // Current character
@@ -3395,51 +3425,18 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
             if (c == ' ') stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
             continue;
-        } else if (std::isupper(stream_first_char(token->content)) 
+        } else if (nargs >= 3
+            && std::isupper(stream_first_char(token->content)) 
             && stream_length(token->content) > 3 
-            && valid(match = match_object(speaker, stream_contents(token->content)))) {
+            && (matches = complex_match(stream_contents(token->content), &keys)).size() == 1) {
             // If we match this we found something in the local area that matches.
-            subject = match;
+            token->target = subject = match = arglist.v.list[3].v.list[matches[0]].v.obj;
             token->operation = token_op::TARGET;
-            // we're going to aggressively match forward now for multi-word matches...
-            if (c == ' ') {
-                Objid read_ahead_match = match;
-                while (valid(read_ahead_match)) {
-                    // Sorry to anyone who has to ever read this code again.
-                    Stream *read_ahead = new_stream(100);
-                    stream_add_string(read_ahead, stream_contents(token->content));
-                    stream_add_char(read_ahead, c);
-                    int ri = i + 1;
-                    for (ri; ri < input_length; ri++) {
-                        const char rc = input_string[ri];
-                        if (rc == ' ') {
-                            read_ahead_match = match_object(speaker, stream_contents(read_ahead));
-                            stream_add_char(read_ahead, rc);
-                            break;
-                        } else if (std::ispunct(rc)) {
-                            ri--;
-                            break;
-                        }
-                        stream_add_char(read_ahead, rc);
-                    }
-                    if (ri == i) break;
-                    if (ri == input_length) read_ahead_match = match_object(speaker, stream_contents(read_ahead));
-                    if (valid(read_ahead_match)) {
-                        // Move the cursor ahead.
-                        i = ri + 1;
-                        c = input_string[i];
-                        reset_stream(token->content);
-                        stream_add_string(token->content, stream_contents(read_ahead));
-                    }
-                    free_stream(read_ahead);
-                }
-            }
             if (c == '\'' && (input_length > i + 1) && input_string[i+1] == 's') {
                 token->operation = token_op::POSSESSIVE_TARGET;
                 if (stream_length(token->postfix) > 0) stream_delete_char(token->postfix); // This clear's the possessive from the buffer.
                 ++i; // This will clear the oncoming s.
             }
-            token->target = subject;
             if (c == ' ') stream_add_char(token->postfix, c);
             COMMIT_AND_ADD(tokens, token);
             continue;
@@ -3532,6 +3529,8 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
         results = listappend(results, result);
     }
 
+    free_var(keys);
+    free_var(arglist);
     return make_var_pack(results);
 }
 
@@ -3568,5 +3567,5 @@ register_server(void)
     register_function("listeners", 0, 1, bf_listeners, TYPE_ANY);
     register_function("buffered_output_length", 0, 1,
                       bf_buffered_output_length, TYPE_OBJ);
-    register_function("tokenize_input", 2, 2, bf_tokenize_input, TYPE_OBJ, TYPE_STR);
+    register_function("tokenize_input", 2, 4, bf_tokenize_input, TYPE_OBJ, TYPE_STR, TYPE_LIST, TYPE_LIST);
 }
