@@ -1319,6 +1319,11 @@ compile_keys(Var *targets)
                 keys = listappend(keys, target_keys);
                 break;
             case TYPE_OBJ:
+                if (!is_valid(targets->v.list[i])) {
+                    free_var(keys);
+                    keys = new_list(0);
+                    return keys;
+                }
                 keys = listappend(keys, name_and_aliases(NOTHING, targets->v.list[i].v.obj));
                 break;
             case TYPE_LIST:
