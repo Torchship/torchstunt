@@ -45,4 +45,4 @@ COPY docker_restart.sh /toaststunt/
 RUN chmod +x /toaststunt/docker_restart.sh
 EXPOSE 7777
 WORKDIR /toaststunt/
-ENTRYPOINT ["./docker_restart.sh", "/cores/${CORE_TO_LOAD}"]
+ENTRYPOINT ./docker_restart.sh /cores/$CORE_TO_LOAD
