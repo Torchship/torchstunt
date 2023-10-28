@@ -1,4 +1,4 @@
-FROM debian:buster-slim as builder
+FROM debian:12.2-slim as builder
 RUN apt update && apt install -y libboost-all-dev libpq-dev libpq5 wget bison gperf libsqlite3-dev libexpat1-dev git libaspell-dev cmake libpcre3-dev nettle-dev g++ libcurl4-openssl-dev libargon2-dev libssl-dev 
 
 # Need to upgrade to a better CMAKE version, as we're super cool bleeding edge neato.
@@ -27,7 +27,7 @@ RUN pwd ;  mkdir build && cd build && cmake ../
 RUN cd /toaststunt/build && make -j2
 
 # Make an entirely new image...
-FROM debian:buster-slim 
+FROM debian:12.2-slim 
 
 # Bring over only necessary packages
 RUN apt update && apt install -y tini libpq-dev libpq5 libsqlite3-dev libexpat1-dev libaspell-dev libpcre3-dev nettle-dev libcurl4-openssl-dev libargon2-dev libssl-dev 
