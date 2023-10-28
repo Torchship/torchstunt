@@ -3355,7 +3355,7 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
           token = new_token(token_op::SPEECH);
           continue;
         }
-        bool is_punct = std::ispunct(c) && c != '-' && c != '&' && c != '-';
+        bool is_punct = std::ispunct(c) && c != '-' && c != '&';
         bool is_space = std::isspace(c);
         // EXPLANATION:
         // How token splitting works is that a token is composed of several truths:
@@ -3385,12 +3385,6 @@ bf_tokenize_input(Var arglist, Byte next, void *vdata, Objid progr)
                 if (c == '.')
                     subject = NOTHING;
             }
-        }
-
-        if (c != '\0' && token->empty()) {
-            // Optimization guard check
-            stream_add_char(token->prefix, c);
-            continue;
         }
 
         // At this point our token might look like...
