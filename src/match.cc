@@ -211,6 +211,13 @@ parse_ordinal(const char* word) {
     return FAILED_MATCH;
 }
 
+template<typename T>
+void pushIfNotExists(std::vector<T>& vec, const T& value) {
+    if (std::find(vec.begin(), vec.end(), value) == vec.end()) {
+        vec.push_back(value);
+    }
+}
+
 std::vector<int>
 complex_match(const char* inputSubject, Var *targets) {
     // Guard check for no targets
@@ -264,15 +271,15 @@ complex_match(const char* inputSubject, Var *targets) {
                 if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
                     return {i};
                 }
-                exactMatches.push_back(i);
+                pushIfNotExists(exactMatches, i);
             } 
             
             if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) == 1) {
-                startMatches.push_back(i);
+                pushIfNotExists(startMatches, i);
             }
             
             if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) >= 1) {
-                containMatches.push_back(i);
+                pushIfNotExists(containMatches, i);
             }
         }
     }
