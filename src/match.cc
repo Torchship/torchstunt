@@ -260,26 +260,20 @@ complex_match(const char* inputSubject, Var *targets) {
         for(int i2 = 1 ; i2 <= targets->v.list[i].v.list[0].v.num; i2++) {
             const char* alias = targets->v.list[i].v.list[i2].v.str;
             
-            bool found_match = false;
             if(!strcasecmp(subject, alias)) {
                 if (ordinal > 0 && ordinal == (exactMatches.size() + 1)) {
                     return {i};
                 }
                 exactMatches.push_back(i);
-                found_match = true;
             } 
             
             if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) == 1) {
                 startMatches.push_back(i);
-                found_match = true;
             }
             
             if (strindex(alias, memo_strlen(alias), subject, memo_strlen(subject), 0) >= 1) {
                 containMatches.push_back(i);
-                found_match = true;
             }
-
-            if (found_match) break;
         }
     }
     
