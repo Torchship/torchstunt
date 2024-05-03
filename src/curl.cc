@@ -152,6 +152,7 @@ static void curl_post_thread_callback(Var arglist, Var *ret)
 
         curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerData.headers);
     }
+    
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, str_dup(arglist.v.list[2].v.str));
