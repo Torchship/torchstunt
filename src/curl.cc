@@ -111,6 +111,17 @@ bf_curl(Var arglist, Byte next, void *vdata, Objid progr)
     return background_thread(curl_thread_callback, &arglist, human_string);
 }
 
+struct CurlHeaderData {
+    struct curl_slist *headers;
+};
+
+int append_header_to_list(Var key, Var value, void* data, int first) {
+    CurlHeaderData* headerData = (CurlHeaderData*) data;
+    std::string header = std::string(key.v.str) + ": " + std::string(value.v.str);
+    headerData->headers = curl_slist_append(headerData->headers, header.c_str());
+    return 0;  // Continue iteration
+}
+
 static void curl_post_thread_callback(Var arglist, Var *ret)
 {
     static Var auth_key = str_dup_to_var("authorization");
@@ -127,19 +138,19 @@ static void curl_post_thread_callback(Var arglist, Var *ret)
     chunk.size = 0;
     
     struct curl_slist *list = NULL;
-
+    
     curl_handle = curl_easy_init();
     curl_easy_setopt(curl_handle, CURLOPT_URL, arglist.v.list[1].v.str);
     curl_easy_setopt(curl_handle, CURLOPT_POST, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-    if (arglist.v.num > 2) {
-        Var value;
-        list = curl_slist_append(list, "Content-Type: application/json");
-        if (maplookup(arglist.v.list[3], auth_key, &value, 0) != nullptr) {
-            std::string token = value.v.str;
-            list = curl_slist_append(list, ("Authorization: " + token).c_str());
-        }
-        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, list);
+    if (nargs > 2 && arglist.v.list[3].type == TYPE_MAP) {
+        Var headers_map = arglist.v.list[3];
+        CurlHeaderData headerData;
+        headerData.headers = curl_slist_append(NULL, "Content-Type: application/json");  // Default header
+
+        mapforeach(headers_map, append_header_to_list, &headerData);
+
+        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerData.headers);
     }
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
