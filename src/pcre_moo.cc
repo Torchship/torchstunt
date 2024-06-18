@@ -25,9 +25,12 @@ public:
     }
 };
 
-static std::map<const char*, pcre_cache_entry*, StrCompare> pcre_pattern_cache;
+static pthread_mutex_t cache_mutex;
+typedef std::pair<const char*, unsigned char> cache_type;
+static std::map<cache_type, pcre_cache_entry*> pcre_pattern_cache;
 
-static void delete_cache_entry(const char *pattern);
+static void free_entry(pcre_cache_entry *);
+static void delete_cache_entry(const char *pattern, unsigned char options);
 static Var result_indices(int ovector[], int n);
 
 struct pcre_cache_entry *
@@ -35,13 +38,16 @@ get_pcre(const char *string, unsigned char options)
 {
     pcre_cache_entry *entry = nullptr;
 
-    if (pcre_pattern_cache.count(string) != 0) {
-        entry = pcre_pattern_cache[string];
+    pthread_mutex_lock(&cache_mutex);
+    cache_type pair = std::make_pair(string, options);
+    if (pcre_pattern_cache.count(pair) != 0) {
+        entry = pcre_pattern_cache[pair];
         entry->cache_hits++;
+        entry->refcount++;
     } else {
         /* If the cache is too large, remove the entry with the least amount of hits. */
         if (pcre_pattern_cache.size() >= PCRE_PATTERN_CACHE_SIZE) {
-            std::map<const char*, pcre_cache_entry*, StrCompare>::iterator entry_to_delete = pcre_pattern_cache.begin(), it = entry_to_delete;
+            std::map<cache_type, pcre_cache_entry*>::iterator entry_to_delete = pcre_pattern_cache.begin(), it = entry_to_delete;
             while (it != pcre_pattern_cache.end()) {
                 if (it->second->cache_hits < entry_to_delete->second->cache_hits) {
                     entry_to_delete = it;
@@ -54,7 +60,7 @@ get_pcre(const char *string, unsigned char options)
             /* We could use delete_cache_entry here, and arguably it would be cleaner, but that would cause an extra pointless
                iteration full of string comparisons. Fortunately we have enough information here to deal with it directly. */
             free_entry(entry_to_delete->second);
-            free_str(entry_to_delete->first);
+            free_str(entry_to_delete->first.first);
             pcre_pattern_cache.erase(entry_to_delete);
         }
 
@@ -68,6 +74,7 @@ get_pcre(const char *string, unsigned char options)
         entry->captures = 0;
         entry->extra = nullptr;
         entry->cache_hits = 0;
+        entry->refcount = 1;
 
         entry->re = pcre_compile(string, options, &err, &eos, nullptr);
         if (entry->re == nullptr) {
@@ -75,17 +82,20 @@ get_pcre(const char *string, unsigned char options)
             entry->error = str_dup(buf);
         } else {
             const char *error = nullptr;
-            entry->extra = pcre_study(entry->re, 0, &error);
+//            entry->extra = pcre_study(entry->re, 0, &error);
             if (error != nullptr)
                 entry->error = str_dup(error);
             else
                 (void)pcre_fullinfo(entry->re, nullptr, PCRE_INFO_CAPTURECOUNT, &(entry->captures));
         }
 
-        if (entry->error == nullptr)
-            pcre_pattern_cache[str_dup(string)] = entry;
+        if (entry->error == nullptr) {
+            entry->refcount++;
+            pcre_pattern_cache[std::make_pair(str_dup(string), options)] = entry;
+        }
     }
 
+    pthread_mutex_unlock(&cache_mutex);
     return entry;
 }
 
@@ -157,16 +167,16 @@ bf_pcre_match(Var arglist, Byte next, void *vdata, Objid progr)
         if (rc < 0 && rc != PCRE_ERROR_NOMATCH)
         {
             /* We've encountered some funky error. Back out and let them know what it is. */
+            delete_cache_entry(pattern, options);
             free_entry(entry);
-            delete_cache_entry(pattern);
             free_var(arglist);
             sprintf(err, "pcre_exec returned error: %d", rc);
             return make_raise_pack(E_INVARG, err, var_ref(zero));
         } else if (rc == 0) {
             /* We don't have enough room to store all of these substrings. */
             sprintf(err, "pcre_exec only has room for %d substrings", entry->captures);
+            delete_cache_entry(pattern, options);
             free_entry(entry);
-            delete_cache_entry(pattern);
             free_var(arglist);
             return make_raise_pack(E_QUOTA, err, var_ref(zero));
         } else if (rc == PCRE_ERROR_NOMATCH) {
@@ -174,8 +184,8 @@ bf_pcre_match(Var arglist, Byte next, void *vdata, Objid progr)
             break;
         } else if (loops >= total_loops) {
             /* The loop has iterated beyond the maximum limit, probably locking the server. Kill it. */
+            delete_cache_entry(pattern, options);
             free_entry(entry);
-            delete_cache_entry(pattern);
             free_var(arglist);
             sprintf(err, "Too many iterations of matching loop: %u", loops);
             return make_raise_pack(E_MAXREC, err, var_ref(zero));
@@ -255,12 +265,16 @@ bf_pcre_match(Var arglist, Byte next, void *vdata, Objid progr)
             break;
     }
 
+    free_entry(entry);
     free_var(arglist);
     return make_var_pack(ret);
 }
 
 void free_entry(pcre_cache_entry *entry)
 {
+    if (--entry->refcount > 0) {
+        return;
+    }
     if (entry->re != nullptr)
         pcre_free(entry->re);
 
@@ -278,11 +292,15 @@ void free_entry(pcre_cache_entry *entry)
     free(entry);
 }
 
-static void delete_cache_entry(const char *pattern)
+static void delete_cache_entry(const char *pattern, unsigned char options)
 {
-    auto it = pcre_pattern_cache.find(pattern);
-    free_str(it->first);
+    cache_type pair = std::make_pair(pattern, options);
+    pthread_mutex_lock(&cache_mutex);
+    auto it = pcre_pattern_cache.find(pair);
+    free_str(it->first.first);
+    free_entry(it->second);
     pcre_pattern_cache.erase(it);
+    pthread_mutex_unlock(&cache_mutex);
 }
 
 /* Create a two element list with the substring indices. */
@@ -360,7 +378,7 @@ bf_pcre_cache_stats(Var arglist, Byte next, void *vdata, Objid progr)
     for (const auto& x : pcre_pattern_cache) {
         count++;
         Var entry = new_list(2);
-        entry.v.list[1] = str_dup_to_var(x.first);
+        entry.v.list[1] = str_dup_to_var(x.first.first);
         entry.v.list[2] = Var::new_int(x.second->cache_hits);
         ret.v.list[count] = entry;
     }
@@ -373,11 +391,44 @@ pcre_shutdown(void)
 {
     for (const auto& x : pcre_pattern_cache) {
         free_entry(x.second);
-        free_str(x.first);
+        free_str(x.first.first);
     }
 
     pcre_pattern_cache.clear();
+    pthread_mutex_destroy(&cache_mutex);
 }
+
+#ifdef SQLITE3_FOUND
+void sqlite_regexp(sqlite3_context *ctx, int argc, sqlite3_value **argv)
+{
+    const char *pattern = (const char *)sqlite3_value_text(argv[0]);
+    if (!pattern)
+    {
+        sqlite3_result_error(ctx, "SQLite REGEXP called with invalid pattern.", -1);
+        return;
+    }
+
+    const char *string = (const char *)sqlite3_value_text(argv[1]);
+    if (!string)
+    {
+        sqlite3_result_error(ctx, "SQLite REGEXP called with invalid string.", -1);
+        return;
+    }
+
+    struct pcre_cache_entry *entry = get_pcre(pattern, 0);
+    if (entry->error != nullptr)
+    {
+        sqlite3_result_error(ctx, entry->error, -1);
+        free_entry(entry);
+        return;
+    }
+
+    int result = pcre_exec(entry->re, entry->extra, string, strlen(string), 0, 0, nullptr, 0);
+
+    free_entry(entry);
+    sqlite3_result_int(ctx, result >= 0);
+}
+#endif /* SQLITE3_FOUND */
 
 void
 register_pcre() {
@@ -386,6 +437,14 @@ register_pcre() {
     register_function("pcre_match", 2, 4, bf_pcre_match, TYPE_STR, TYPE_STR, TYPE_INT, TYPE_INT);
     register_function("pcre_replace", 2, 2, bf_pcre_replace, TYPE_STR, TYPE_STR);
     register_function("pcre_cache_stats", 0, 0, bf_pcre_cache_stats);
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+
+    pthread_mutex_init(&cache_mutex, &attr);
+
+    pthread_mutexattr_destroy(&attr);
 }
 
 #else /* PCRE_FOUND */

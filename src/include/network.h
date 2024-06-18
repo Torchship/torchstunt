@@ -53,6 +53,8 @@ typedef struct {		/* Network's handle on a listening point */
     void *ptr;
 } network_listener;
 
+struct nhandle; /* Forward declaration of nhandle. */
+
 #include "server.h"		/* Include this *after* defining the types */
 
 struct proto {
@@ -75,7 +77,7 @@ struct proto {
 
 extern enum error make_listener(Var desc, int *fd,
 				      const char **name, const char **ip_address,
-					  uint16_t *port, const bool use_ipv6);
+					  uint16_t *port, const bool use_ipv6, const char *interface);
 				/* DESC is the second argument in a call to the
 				 * built-in MOO function `listen()'; it should
 				 * be used as a specification of a new local
@@ -175,7 +177,8 @@ extern int network_initialize(int argc, char **argv,
 extern enum error network_make_listener(server_listener sl, Var desc,
 					network_listener * nl, 
 					const char **name, const char **ip_address,
-					uint16_t *port, bool use_ipv6 USE_TLS_BOOL_DEF TLS_CERT_PATH_DEF);
+					uint16_t *port, bool use_ipv6, const char *interface 
+					USE_TLS_BOOL_DEF TLS_CERT_PATH_DEF);
 				/* DESC is the second argument in a call to the
 				 * built-in MOO function `listen()'; it should
 				 * be used as a specification of a new local
@@ -340,6 +343,8 @@ extern int network_set_connection_option(network_handle nh,
 				 * the given setting if valid.
 				 */
 
+int network_set_client_keep_alive(network_handle nh, Var map);
+
 #ifdef OUTBOUND_NETWORK
 extern enum error network_open_connection(Var arglist, server_listener sl, bool use_ipv6 USE_TLS_BOOL_DEF);
 				/* The given MOO arguments should be used as a
@@ -437,6 +442,8 @@ extern void lock_connection_name_mutex(const network_handle nh);
 extern void unlock_connection_name_mutex(const network_handle nh);
 extern void increment_nhandle_refcount(const network_handle nh);
 extern void decrement_nhandle_refcount(const network_handle nh);
-extern int nhandle_refcount(const network_handle nh);
+extern uint32_t get_nhandle_refcount(const network_handle nh);
+extern uint32_t get_nhandle_refcount(nhandle *h);
+extern uint32_t nhandle_refcount(const network_handle nh);
 
 #endif				/* Network_H */

@@ -60,7 +60,7 @@ CurlReadMemoryCallback(char *dest, size_t size, size_t nmemb, void *userp)
     return 0; /* no more data left to deliver */
 }
 
-static void curl_thread_callback(Var arglist, Var *ret)
+static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
 {
     int nargs = arglist.v.list[0].v.num;
     CURL *curl_handle;
@@ -105,10 +105,7 @@ bf_curl(Var arglist, Byte next, void *vdata, Objid progr)
     if (!is_wizard(progr))
         return make_error_pack(E_PERM);
 
-    char *human_string = nullptr;
-    asprintf(&human_string, "curl %s", arglist.v.list[1].v.str);
-
-    return background_thread(curl_thread_callback, &arglist, human_string);
+    return background_thread(curl_thread_callback, &arglist);
 }
 
 struct CurlHeaderData {

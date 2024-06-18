@@ -889,7 +889,7 @@ bf_recycle_write(void *vdata)
 {
     Objid *data = (Objid *)vdata;
 
-    dbio_printf("bf_recycle data: oid = %d, cont = 0\n", *data);
+    dbio_printf("bf_recycle data: oid = %" PRIdN ", cont = 0\n", *data);
 }
 
 static void *
@@ -1018,6 +1018,49 @@ bf_isa(Var arglist, Byte next, void *vdata, Objid progr)
 
     free_var(arglist);
     return ret;
+}
+
+/* Locate an object in the database by name more quickly than is possible in-DB.
+ * To avoid numerous list reallocations, we put everything in a vector and then
+ * transfer it over to a list when we know how many values we have. */
+void locate_by_name_thread_callback(Var arglist, Var *ret, void *extra_data)
+{
+    Var name, object;
+    object.type = TYPE_OBJ;
+    std::vector<int> tmp;
+
+    const int case_matters = arglist.v.list[0].v.num < 2 ? 0 : is_true(arglist.v.list[2]);
+    const int string_length = memo_strlen(arglist.v.list[1].v.str);
+
+    const Objid last_objid = db_last_used_objid();
+    for (int x = 0; x <= last_objid; x++)
+    {
+        if (!valid(x))
+            continue;
+
+        object.v.obj = x;
+        db_find_property(object, "name", &name);
+        if (strindex(name.v.str, memo_strlen(name.v.str), arglist.v.list[1].v.str, string_length, case_matters))
+            tmp.push_back(x);
+    }
+
+    *ret = new_list(tmp.size());
+    const auto vector_size = tmp.size();
+    for (size_t x = 0; x < vector_size; x++) {
+        ret->v.list[x + 1] = Var::new_obj(tmp[x]);
+    }
+}
+
+static package
+bf_locate_by_name(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    if (!is_wizard(progr))
+    {
+        free_var(arglist);
+        return make_error_pack(E_PERM);
+    }
+
+    return background_thread(locate_by_name_thread_callback, &arglist);
 }
 
 static bool multi_parent_isa(const Var *object, const Var *parents)

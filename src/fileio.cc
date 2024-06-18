@@ -1,5 +1,6 @@
 /*
  * file i/o server modification
+ * Based on File Utilities Package (FIO) v1.5
  */
 
 #define FILE_IO 1
@@ -70,15 +71,6 @@ struct line_buffer {
     struct line_buffer *next;
 };
 
-
-/***************************************************************
- * Version and package informaion
- ***************************************************************/
-
-char file_package_name[]    = "FIO";
-char file_package_version[] = "1.7";
-
-
 /***************************************************************
  * File <-> FHANDLE descriptor table interface
  ***************************************************************/
@@ -88,13 +80,17 @@ static std::unordered_map <Num, file_handle> file_table;
 static Num next_handle = 1;
 
 static char file_handle_valid(Var fhandle) {
-    Num i = fhandle.v.num;
     if (fhandle.type != TYPE_INT)
         return 0;
+    
+    Num i = fhandle.v.num;
+    
     if ((i < 0) || (i >= next_handle))
         return 0;
+    
     if (file_table.count(i) == 0)
         return 0;
+    
     return file_table[i].valid;
 }
 
@@ -338,6 +334,9 @@ const char *file_resolve_path(const char *pathname) {
 
 }
 
+
+/***************************************************************
+ * Built in functions
 
 /***************************************************************
  * File open and close.
