@@ -119,7 +119,7 @@ int append_header_to_list(Var key, Var value, void* data, int first) {
     return 0;  // Continue iteration
 }
 
-static void curl_post_thread_callback(Var arglist, Var *ret)
+static void curl_post_thread_callback(Var arglist, Var *ret, void *extra_data)
 {
     static Var auth_key = str_dup_to_var("authorization");
 

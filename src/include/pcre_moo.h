@@ -23,7 +23,7 @@ struct pcre_cache_entry {
 
 extern void pcre_shutdown(void);
 
-extern void free_entry(pcre_cache_entry *);
+static void free_entry(pcre_cache_entry *);
 extern struct pcre_cache_entry * get_pcre(const char *string, unsigned char options);
 
 #endif /* EXTENSION_PCRE_H */

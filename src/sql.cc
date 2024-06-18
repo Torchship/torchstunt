@@ -606,7 +606,7 @@ static SQLSessionPool* get_or_create_session_pool(
 }
 
 void
-query_callback(const Var arglist, Var *ret)
+query_callback(const Var arglist, Var *ret, void *extra_data)
 {
     int nargs = arglist.v.list[0].v.num;
     int handle_id = arglist.v.list[1].v.num;

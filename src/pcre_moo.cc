@@ -11,6 +11,7 @@
 #include "list.h"
 #include "utils.h"
 #include "log.h"
+#include <pthread.h>
 #include "server.h"
 #include "map.h"
 #include "dependencies/pcrs.h"
@@ -29,7 +30,6 @@ static pthread_mutex_t cache_mutex;
 typedef std::pair<const char*, unsigned char> cache_type;
 static std::map<cache_type, pcre_cache_entry*> pcre_pattern_cache;
 
-static void free_entry(pcre_cache_entry *);
 static void delete_cache_entry(const char *pattern, unsigned char options);
 static Var result_indices(int ovector[], int n);
 
