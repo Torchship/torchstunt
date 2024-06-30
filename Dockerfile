@@ -13,7 +13,7 @@ RUN ln -s /opt/cmake-3.24.0-rc4-linux-x86_64/bin/* /usr/local/bin
 RUN git clone https://github.com/jtv/libpqxx.git
 WORKDIR /opt/libpqxx
 RUN git checkout 7.6
-RUN pwd ;  cmake . && make -j2 && make install
+RUN pwd ;  cmake -DCMAKE_BUILD_TYPE=LeakCheck . && make -j2 && make install
 
 # Moving on to building toaststunt...
 WORKDIR /toaststunt
