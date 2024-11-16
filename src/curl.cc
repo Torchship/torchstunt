@@ -29,35 +29,29 @@ typedef struct CurlMemoryStruct {
 struct curl_slist *set_or_overwrite_header(struct curl_slist *headers, const char *header_name, const char *header_value) {
     size_t header_name_len = strlen(header_name);
     char *new_header = NULL;
+    struct curl_slist *new_headers = NULL;
+    struct curl_slist *temp;
 
     // Allocate memory for the new header
     asprintf(&new_header, "%s: %s", header_name, header_value);
 
-    // Check if the header exists
-    struct curl_slist *current = headers, *prev = NULL;
-    while (current) {
-        if (strncasecmp(current->data, header_name, header_name_len) == 0 &&
-            current->data[header_name_len] == ':') {
-            // Header exists, replace it
-            struct curl_slist *to_delete = current;
-            if (prev) {
-                prev->next = current->next; // Remove from the middle
-            } else {
-                headers = current->next; // Remove the first header
-            }
-            current = current->next;
-            curl_slist_free_all(to_delete); // Free the removed header
-        } else {
-            prev = current;
-            current = current->next;
+    // Rebuild the header list without the header to be replaced
+    for (temp = headers; temp; temp = temp->next) {
+        if (strncasecmp(temp->data, header_name, header_name_len) == 0 &&
+            temp->data[header_name_len] == ':') {
+            continue; // Skip the header to be replaced
         }
+        new_headers = curl_slist_append(new_headers, temp->data);
     }
 
     // Append the new header
-    headers = curl_slist_append(headers, new_header);
-    free(new_header); // Free temporary memory
+    new_headers = curl_slist_append(new_headers, new_header);
+    free(new_header);
 
-    return headers;
+    // Free the old header list
+    curl_slist_free_all(headers);
+
+    return new_headers;
 }
 
 static size_t
@@ -118,15 +112,14 @@ static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
                 curl_easy_cleanup(curl_handle);
                 return;
             }
-            headers = set_or_overwrite_header(headers, str_dup(key.v.str), str_dup(value.v.str));
+            headers = set_or_overwrite_header(headers, key.v.str, value.v.str);
         }
     }
     curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
 
     // Set body for request if necessary.
     if (nargs >= 4) {
-      const char *request_data = str_dup(arglist.v.list[4].v.str);
-      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, request_data);
+      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, arglist.v.list[4].v.str);
     }
 
     // Specific method handling.
@@ -144,6 +137,7 @@ static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
       // This was an invalid method.
       make_error_map(E_INVARG, "Invalid HTTP Method Provided", ret);
       curl_easy_cleanup(curl_handle);
+      curl_slist_free_all(headers);
       // Return control early, so the call doesn't actually fall-thru and call the curl handle.
       return;
     }
@@ -159,6 +153,7 @@ static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
       oklog("CURL [%s]: %lu bytes retrieved from: %s\n", method, (unsigned long)chunk.size, arglist.v.list[1].v.str);
     }
 
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl_handle);
     free(chunk.result);
 }
@@ -218,10 +213,10 @@ bf_url_decode(Var arglist, Byte next, void *vdata, Objid progr)
 
 void curl_shutdown(void)
 {
-    curl_global_cleanup();
-    
     if (curl_handle != nullptr)
         curl_easy_cleanup(curl_handle);
+
+    curl_global_cleanup();
 }
 
 void
