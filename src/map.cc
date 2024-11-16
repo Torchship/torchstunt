@@ -58,27 +58,6 @@
   header comment, such as this one.
 */
 
-#define HEIGHT_LIMIT 64     /* Tallest allowable tree */
-
-struct rbtree {
-    rbnode *root;       /* Top of the tree */
-    size_t size;        /* Number of items */
-};
-
-struct rbnode {
-    Var key;
-    Var value;
-    int red;            /* Color (1=red, 0=black) */
-    rbnode *link[2];        /* Left (0) and right (1) links */
-};
-
-struct rbtrav {
-    rbtree *tree;       /* Paired tree */
-    rbnode *it;         /* Current node */
-    rbnode *path[HEIGHT_LIMIT]; /* Traversal path */
-    size_t top;         /* Top of stack */
-};
-
 static int
 node_compare(const rbnode *node1, const rbnode *node2, int case_matters)
 {
@@ -544,7 +523,7 @@ rbmove(rbtrav *trav, int dir)
 /*
  * Initializes a traversal object to the smallest valued node.
  */
-static rbnode *
+rbnode *
 rbtfirst(rbtrav *trav, rbtree *tree)
 {
     return rbstart(trav, tree, 0);  /* Min value */
@@ -553,7 +532,7 @@ rbtfirst(rbtrav *trav, rbtree *tree)
 /*
  * Initializes a traversal object to the largest valued node.
  */
-static rbnode *
+rbnode *
 rbtlast(rbtrav *trav, rbtree *tree)
 {
     return rbstart(trav, tree, 1);  /* Max value */
@@ -562,7 +541,7 @@ rbtlast(rbtrav *trav, rbtree *tree)
 /*
  * Traverses to the next value in ascending order.
  */
-static rbnode *
+rbnode *
 rbtnext(rbtrav *trav)
 {
     return rbmove(trav, 1); /* Toward larger items */
@@ -571,7 +550,7 @@ rbtnext(rbtrav *trav)
 /*
  * Traverses to the next value in descending order.
  */
-static rbnode *
+rbnode *
 rbtprev(rbtrav *trav)
 {
     return rbmove(trav, 0); /* Toward smaller items */

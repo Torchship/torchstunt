@@ -124,7 +124,7 @@ typedef enum {
 
 typedef struct Var Var;
 
-/* see map.c */
+/* see map.h */
 typedef struct rbtree rbtree;
 typedef struct rbnode rbnode;
 typedef struct rbtrav rbtrav;
@@ -161,7 +161,7 @@ typedef struct Waif {
 #endif
 } Waif;
 
-    struct Var {
+struct Var {
     union {
 	const char *str;	/* STR */
 	Num num;		/* NUM, CATCH, FINALLY */

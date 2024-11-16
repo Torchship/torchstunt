@@ -18,6 +18,48 @@ typedef struct CurlMemoryStruct {
     size_t size;
 } CurlMemoryStruct;
 
+/**
+ * Set or overwrite a header in the curl_slist.
+ *
+ * @param headers Pointer to the curl_slist containing the headers.
+ * @param header_name Name of the header to set or overwrite (e.g., "Content-Type").
+ * @param header_value Value of the header to set (e.g., "application/json").
+ * @return Updated curl_slist with the header set.
+ */
+struct curl_slist *set_or_overwrite_header(struct curl_slist *headers, const char *header_name, const char *header_value) {
+    size_t header_name_len = strlen(header_name);
+    char *new_header = NULL;
+
+    // Allocate memory for the new header
+    asprintf(&new_header, "%s: %s", header_name, header_value);
+
+    // Check if the header exists
+    struct curl_slist *current = headers, *prev = NULL;
+    while (current) {
+        if (strncasecmp(current->data, header_name, header_name_len) == 0 &&
+            current->data[header_name_len] == ':') {
+            // Header exists, replace it
+            struct curl_slist *to_delete = current;
+            if (prev) {
+                prev->next = current->next; // Remove from the middle
+            } else {
+                headers = current->next; // Remove the first header
+            }
+            current = current->next;
+            curl_slist_free_all(to_delete); // Free the removed header
+        } else {
+            prev = current;
+            current = current->next;
+        }
+    }
+
+    // Append the new header
+    headers = curl_slist_append(headers, new_header);
+    free(new_header); // Free temporary memory
+
+    return headers;
+}
+
 static size_t
 CurlWriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -39,60 +81,82 @@ CurlWriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     return realsize;
 }
 
-static size_t
-CurlReadMemoryCallback(char *dest, size_t size, size_t nmemb, void *userp)
-{
-    struct CurlMemoryStruct *wt = (struct CurlMemoryStruct *)userp;
-    size_t buffer_size = size*nmemb;
- 
-    if(wt->size) {
-        /* copy as much as possible from the source to the destination */
-        size_t copy_this_much = wt->size;
-        if(copy_this_much > buffer_size)
-            copy_this_much = buffer_size;
-        memcpy(dest, wt->result, copy_this_much);
-    
-        wt->result += copy_this_much;
-        wt->size -= copy_this_much;
-        return copy_this_much; /* we copied this many bytes */
-    }
-    
-    return 0; /* no more data left to deliver */
-}
-
 static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
 {
-    int nargs = arglist.v.list[0].v.num;
     CURL *curl_handle;
     CURLcode res;
     CurlMemoryStruct chunk;
+    struct curl_slist *headers = NULL;
     long timeout = CURL_TIMEOUT;
+
+    // Get out total list of arguments
+    int nargs = arglist.v.list[0].v.num;
+
+    // Default value ternary; if we don't have an arg then the default is GET.
+    const char *method = nargs <= 1 ? "GET" : arglist.v.list[2].v.str;
+    
+    // Set up the basic universals of the CURL handle.
+    curl_handle = curl_easy_init();
+    curl_easy_setopt(curl_handle, CURLOPT_URL, arglist.v.list[1].v.str);
+    curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS_STR, "http,https,dict");
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+
+    // This block of code reads our headers argument and writes those into the request here.
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    if (nargs >= 3) {
+        Var key, value;
+        FOR_EACH_MAP(key, value, arglist.v.list[3]) {
+            if (key.type != TYPE_STR) {
+                make_error_map(E_INVARG, "Header key type was not a string", ret);
+                curl_easy_cleanup(curl_handle);
+                return;
+            }
+            if (value.type != TYPE_STR) {
+                make_error_map(E_INVARG, "Header value type was not a string", ret);
+                curl_easy_cleanup(curl_handle);
+                return;
+            }
+            headers = set_or_overwrite_header(headers, str_dup(key.v.str), str_dup(value.v.str));
+        }
+    }
+    curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
+
+    // Set body for request if necessary.
+    if (nargs >= 4) {
+      const char *request_data = str_dup(arglist.v.list[4].v.str);
+      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, request_data);
+    }
+
+    // Specific method handling.
+    if (!strcasecmp(method, "POST")) {
+      curl_easy_setopt(curl_handle, CURLOPT_POST, 1L);
+    } else if (!strcasecmp(method, "PUT")) {
+      // https://curl.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+      curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "PUT");
+    } else if (!strcasecmp(method, "DELETE")) {
+      // https://curl.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+      curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "DELETE");
+    } else if (!strcasecmp(method, "GET")) {
+      // Nothing needed here; GET is the default.
+    } else {
+      // This was an invalid method.
+      make_error_map(E_INVARG, "Invalid HTTP Method Provided", ret);
+      curl_easy_cleanup(curl_handle);
+      // Return control early, so the call doesn't actually fall-thru and call the curl handle.
+      return;
+    }
 
     chunk.result = (char*)malloc(1);
     chunk.size = 0;
-    
-    if (nargs > 2)
-        timeout = arglist.v.list[3].v.num;
-
-    curl_handle = curl_easy_init();
-    curl_easy_setopt(curl_handle, CURLOPT_URL, arglist.v.list[1].v.str);
-    curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, timeout);
-
-    if (nargs > 1 && is_true(arglist.v.list[2]))
-        curl_easy_setopt(curl_handle, CURLOPT_HEADER, 1L);
-    
-
     res = curl_easy_perform(curl_handle);
 
-    if (res != CURLE_OK)
-        make_error_map(E_INVARG, curl_easy_strerror(res), ret);
-    else {
-        *ret = str_dup_to_var(raw_bytes_to_binary(chunk.result, chunk.size));
-        oklog("CURL: %lu bytes retrieved from: %s\n", (unsigned long)chunk.size, arglist.v.list[1].v.str);
+    if (res != CURLE_OK) {
+      make_error_map(E_INVARG, curl_easy_strerror(res), ret);
+    } else {
+      *ret = str_dup_to_var(raw_bytes_to_binary(chunk.result, chunk.size));
+      oklog("CURL [%s]: %lu bytes retrieved from: %s\n", method, (unsigned long)chunk.size, arglist.v.list[1].v.str);
     }
 
     curl_easy_cleanup(curl_handle);
@@ -106,83 +170,6 @@ bf_curl(Var arglist, Byte next, void *vdata, Objid progr)
         return make_error_pack(E_PERM);
 
     return background_thread(curl_thread_callback, &arglist);
-}
-
-struct CurlHeaderData {
-    struct curl_slist *headers;
-};
-
-int append_header_to_list(Var key, Var value, void* data, int first) {
-    CurlHeaderData* headerData = (CurlHeaderData*) data;
-    std::string header = std::string(key.v.str) + ": " + std::string(value.v.str);
-    headerData->headers = curl_slist_append(headerData->headers, header.c_str());
-    return 0;  // Continue iteration
-}
-
-static void curl_post_thread_callback(Var arglist, Var *ret, void *extra_data)
-{
-    static Var auth_key = str_dup_to_var("authorization");
-
-    int nargs = arglist.v.list[0].v.num;
-    CURL *curl_handle;
-    CURLcode res;
-    CurlMemoryStruct chunk;
-    CurlMemoryStruct wt;
-
-    // wt.result = str_dup(arglist.v.list[2].v.str);
-    // wt.size = strlen(wt.result);
-    chunk.result = (char*)malloc(1);
-    chunk.size = 0;
-    
-    struct curl_slist *list = NULL;
-    
-    curl_handle = curl_easy_init();
-    curl_easy_setopt(curl_handle, CURLOPT_URL, arglist.v.list[1].v.str);
-    curl_easy_setopt(curl_handle, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-    if (nargs > 2 && arglist.v.list[3].type == TYPE_MAP) {
-        Var headers_map = arglist.v.list[3];
-        CurlHeaderData headerData;
-        headerData.headers = curl_slist_append(NULL, "Content-Type: application/json");  // Default header
-
-        mapforeach(headers_map, append_header_to_list, &headerData);
-
-        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerData.headers);
-    }
-    
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, CurlWriteMemoryCallback);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
-    curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, str_dup(arglist.v.list[2].v.str));
-    // curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, CurlReadMemoryCallback);
-    // curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)&wt);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-
-    if (nargs > 1 && is_true(arglist.v.list[2]))
-        curl_easy_setopt(curl_handle, CURLOPT_HEADER, 1L);
-
-    res = curl_easy_perform(curl_handle);
-
-    if (res != CURLE_OK)
-        make_error_map(E_INVARG, curl_easy_strerror(res), ret);
-    else {
-        *ret = str_dup_to_var(raw_bytes_to_binary(chunk.result, chunk.size));
-        oklog("CURL: %lu bytes retrieved from: %s\n", (unsigned long)chunk.size, arglist.v.list[1].v.str);
-    }
-
-    curl_easy_cleanup(curl_handle);
-    curl_slist_free_all(list); /* free the list */
-}
-
-static package
-bf_curl_post(Var arglist, Byte next, void *vdata, Objid progr)
-{
-    if (!is_wizard(progr))
-        return make_error_pack(E_PERM);
-
-    char *human_string = nullptr;
-    asprintf(&human_string, "curl %s", arglist.v.list[1].v.str);
-
-    return background_thread(curl_post_thread_callback, &arglist, human_string);
 }
 
 static package
@@ -244,8 +231,8 @@ register_curl(void)
     curl_global_init(CURL_GLOBAL_ALL);
     curl_handle = curl_easy_init();
  
-    register_function("curl", 1, 2, bf_curl, TYPE_STR, TYPE_ANY);
-    register_function("curl_post", 2, 3, bf_curl_post, TYPE_STR, TYPE_STR, TYPE_MAP, TYPE_ANY);
+    /** curl(STR url[, STR method = "GET", MAP headers, STR body]) */
+    register_function("curl", 1, 4, bf_curl, TYPE_STR, TYPE_STR, TYPE_MAP, TYPE_STR);
     register_function("url_encode", 1, 1, bf_url_encode, TYPE_STR);
     register_function("url_decode", 1, 1, bf_url_decode, TYPE_STR);
 }

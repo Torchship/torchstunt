@@ -29,6 +29,30 @@
 
 #include "structures.h"
 
+#ifndef MAP_H
+#define MAP_H
+#define HEIGHT_LIMIT 64     /* Tallest allowable tree */
+
+struct rbtree {
+    rbnode *root;       /* Top of the tree */
+    size_t size;        /* Number of items */
+};
+
+struct rbnode {
+    Var key;
+    Var value;
+    int red;            /* Color (1=red, 0=black) */
+    rbnode *link[2];        /* Left (0) and right (1) links */
+};
+
+struct rbtrav {
+    rbtree *tree;       /* Paired tree */
+    rbnode *it;         /* Current node */
+    rbnode *path[HEIGHT_LIMIT]; /* Traversal path */
+    size_t top;         /* Top of stack */
+};
+#endif
+
 extern Var new_map(void);
 extern void destroy_map(Var map);
 extern Var map_dup(Var map);
@@ -40,6 +64,8 @@ extern int mapseek(Var map, Var key, Var *iter, int case_matters);
 extern int mapequal(Var lhs, Var rhs, int case_matters);
 extern Num maplength(Var map);
 extern int mapempty(Var map);
+extern rbnode *rbtfirst(rbtrav *trav, rbtree *tree);
+extern rbnode *rbtnext(rbtrav *trav);
 
 extern int map_sizeof(rbtree *tree);
 
@@ -58,6 +84,24 @@ extern enum error maprangeset(Var map, rbtrav *from, rbtrav *to, Var value, Var 
 
 typedef int (*mapfunc) (Var key, Var value, void *data, int first);
 extern int mapforeach(Var map, mapfunc func, void *data);
+
+/*
+ * Iterate over the key-value pairs in the map `mp`. Sets `key` and `val`
+ * to each key-value pair in turn. `idx` and `cnt` must be int variables.
+ * In the body of the statement, they hold the current index and total count,
+ * respectively. Use the macro as follows (assuming you already have a map in `items`):
+ *
+ *   Var key, value;
+ *   int i, c;
+ *   FOR_EACH_MAP(key, value, items) {
+ *       printf("key = %s, value = %s\n", value_to_literal(key), value_to_literal(value));
+ *   }
+ */
+#define FOR_EACH_MAP(key, val, map) \
+    for (rbtrav trav__ = {0}; \
+         ((trav__.it = (trav__.it ? rbtnext(&trav__) : rbtfirst(&trav__, (map).v.tree))) != NULL) && \
+         ((key) = trav__.it->key, (val) = trav__.it->value, 1); )
+
 
 /* You're never going to need to use this!
  * Clears a node in place by setting the associated value type to
