@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug moo",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/moo",  // Path to your executable in the build folder
+      "args": ["Minimal.db", "Minimal.out.db"],    // Arguments for the program
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": true,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "miDebuggerPath": "/usr/bin/gdb",  // Ensure gdb is installed
+      "preLaunchTask": "Build Project",  // This will trigger the build task before debugging
+      "miDebuggerArgs": "",
+      "serverLaunchTimeout": 10000
+    }
+  ]
+}

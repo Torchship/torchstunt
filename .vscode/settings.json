@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "system_error": "cpp",
+    "regex": "cpp",
+    "map": "cpp",
+    "__tree": "cpp"
+  }
+}

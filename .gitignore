@@ -22,7 +22,6 @@ xcode
 Makefile.in.bak
 keywords.cc
 build
-.vscode
 test/executables/true
 test/executables/sleep
 test/executables/echo
