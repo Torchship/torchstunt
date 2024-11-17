@@ -163,51 +163,51 @@ typedef struct Waif {
 
 struct Var {
     union {
-	const char *str;	/* STR */
-	Num num;		/* NUM, CATCH, FINALLY */
-	Objid obj;		/* OBJ */
-	enum error err;		/* ERR */
-	Var *list;		/* LIST */
-	rbtree *tree;		/* MAP */
-	rbtrav *trav;		/* ITER */
-	double fnum;		/* FLOAT */
-	Object *anon;		/* ANON */
-    Waif *waif;         /* WAIF */
-	bool truth	;		/* BOOL */
+        const char *str;	    /* STR */
+        Num num;		          /* NUM, CATCH, FINALLY */
+        Objid obj;		        /* OBJ */
+        enum error err;		    /* ERR */
+        Var *list;		        /* LIST */
+        rbtree *tree;		      /* MAP */
+        rbtrav *trav;		      /* ITER */
+        double fnum;		      /* FLOAT */
+        Object *anon;		      /* ANON */
+        Waif *waif;           /* WAIF */
+        bool truth	;		      /* BOOL */
     } v;
     var_type type;
 
     bool
     is_complex() {
-	return TYPE_COMPLEX_FLAG & type;
+	      return TYPE_COMPLEX_FLAG & type;
     }
 
     bool
     is_none() {
-	return TYPE_NONE == type;
+	      return TYPE_NONE == type;
     }
 
     bool
     is_collection() {
-	return TYPE_LIST == type || TYPE_MAP == type || TYPE_ANON == type;
+	      return TYPE_LIST == type || TYPE_MAP == type || TYPE_ANON == type;
     }
 
     bool
     is_object() {
-	return TYPE_OBJ == type || TYPE_ANON == type || TYPE_WAIF == type;
+	      return TYPE_OBJ == type || TYPE_ANON == type || TYPE_WAIF == type;
     }
 
     bool
     is_int() {
-	return TYPE_INT == type;
+	      return TYPE_INT == type;
     }
 
     static Var
     new_int(const Num num) {
-	Var v;
-	v.type = TYPE_INT;
-	v.v.num = num;
-	return v;
+        Var v;
+        v.type = TYPE_INT;
+        v.v.num = num;
+        return v;
     }
 
     static Var
@@ -221,28 +221,28 @@ struct Var {
 
     bool
     is_obj() const {
-	return TYPE_OBJ == type;
+	      return TYPE_OBJ == type;
     }
 
     static Var
     new_obj(const Objid &obj) {
-	Var v;
-	v.type = TYPE_OBJ;
-	v.v.obj = obj;
-	return v;
+        Var v;
+        v.type = TYPE_OBJ;
+        v.v.obj = obj;
+        return v;
     }
 
     bool
     is_str() const {
-	return TYPE_STR == type;
+	      return TYPE_STR == type;
     }
 
     static Var
     new_waif(Waif *waif) {
-    Var v;
-    v.type = TYPE_WAIF;
-    v.v.waif = waif;
-    return v;
+        Var v;
+        v.type = TYPE_WAIF;
+        v.v.waif = waif;
+        return v;
     }
 
     static Var
