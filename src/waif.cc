@@ -657,6 +657,11 @@ bf_waifs(Var arglist, Byte next, void *vdata, Objid progr)
         if (arglist.v.list[0].v.num > 0 && arglist.v.list[1].v.obj != w->_class) {
             continue;
         }
+        update_waif_propdefs(w);
+        
+        if (w->_class == NOTHING) {
+          continue;
+        }
         Var e;
         e.type = TYPE_WAIF;
         e.v.waif = w;
