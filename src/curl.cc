@@ -270,6 +270,7 @@ static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
         *ret = mapinsert(*ret, var_ref(cookies_key), cookie_list_var);
 
         oklog("CURL [%s]: %lu bytes retrieved from: %s\n", method, (unsigned long)chunk.size, arglist.v.list[1].v.str);
+        curl_slist_free_all(cookies);
     }
 
     curl_slist_free_all(headers);
@@ -277,7 +278,6 @@ static void curl_thread_callback(Var arglist, Var *ret, void *extra_data)
         free(header_list.headers[i]);
     }
     free(header_list.headers);
-    curl_slist_free_all(cookies);
     curl_easy_cleanup(curl_handle);
     free(chunk.result);
 }
